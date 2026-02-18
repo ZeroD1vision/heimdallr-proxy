@@ -1,0 +1,17 @@
+extends:
+  - "@commitlint/config-conventional"
+
+rules:
+  type-enum:
+    - 2
+    - always
+    - [feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert]
+  type-case: [2, always, lower-case]
+  subject-case: [2, always, lower-case]
+  subject-empty: [2, never]
+  subject-full-stop: [2, never, "."] # Запрет точки в конце заголовка
+  header-max-length: [2, always, 100]
+  
+  # Тело и футер явно необязательны
+  body-leading-blank: [0]
+  footer-leading-blank: [0]
