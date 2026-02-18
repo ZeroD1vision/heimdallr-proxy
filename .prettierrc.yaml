@@ -1,0 +1,8 @@
+printWidth: 80           # Строгая длина строки
+tabWidth: 2              # Стандарт индустрии
+useTabs: false           # Только пробелы
+semi: true               # Точка с запятой обязательна
+singleQuote: true        # Одинарные кавычки
+trailingComma: "all"     # Запятые везде для чистоты диффов (Git diff)
+bracketSpacing: true     # Пробелы в объектах
+arrowParens: "always"    # Всегда скобки у стрелочных функций
