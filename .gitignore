@@ -1,0 +1,20 @@
+# Бинарники
+bin/
+heimdallr
+
+# Логи и база
+*.log
+*.db
+*.db-journal
+
+# Зависимости
+node_modules/
+dist/
+
+# Секреты и конфиги
+.env
+configs/config.yaml
+
+# IDE
+.idea/
+.vscode/
