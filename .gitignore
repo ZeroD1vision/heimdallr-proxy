@@ -1,6 +1,6 @@
 # Бинарники
 bin/
-heimdallr
+/heimdallr
 
 # Логи и база
 *.log
