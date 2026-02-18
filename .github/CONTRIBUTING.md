@@ -33,12 +33,10 @@
 ## Integration Policy
 
 ### 1. Linear History Standard
-- **Rebase over Merge**: All feature branches must be kept up-to-date with `main` using `git rebase main`. Merge commits in PRs are strictly prohibited.
-- **Why**: This ensures a clean, readable, and navigable project history where every commit is functional and sequential.
+**Rebase over Merge**: All feature branches must be kept up-to-date with `main` using `git rebase main`. Merge commits in PRs are strictly prohibited. This ensures a clean, readable, and navigable project history where every commit is functional and sequential.
 
 ### 2. Atomic Squash
-- **Squash and Merge**: All PRs must be squashed into a single, high-quality atomic commit upon merging into `main`.
-- **Commit Format**: The final squash commit message must strictly follow the Conventional Commits format (e.g., `feat(ui): add navbar`). 
+**Squash and Merge**: All PRs must be squashed into a single, high-quality atomic commit upon merging into `main`. The final squash commit message must strictly follow the Conventional Commits format (e.g., `feat(ui): add navbar`). 
 
 ### 3. Cleanup
-- **Branch Deletion**: Feature branches must be deleted immediately after a successful merge to keep the repository clean.
+**Branch Deletion**: Feature branches must be deleted immediately after a successful merge to keep the repository clean.
