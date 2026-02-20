@@ -14,21 +14,21 @@ R_PORT   = $(SERVER_TUNNEL_PORT)
 
 # Сборка под текущую ОС
 build:
-	go build -o bin/heimdallr ./cmd/heimdallr
+	@go build -o bin/heimdallr ./cmd/heimdallr
 
 # Запуск локально
 run: build
-	./bin/heimdallr
+	@./bin/heimdallr
 
 # Запуск туннеля
 tunnel:
 	@echo "Opening tunnel to $(HOST) port $(PORT)..."
-	@pkill -f "$(L_PORT):127.0.0.1:$(R_PORT)" || true
+	@pkill -f "^ssh.*$(L_PORT):127.0.0.1:$(R_PORT)" || true
 	@ssh -i $(KEY_PATH) -p $(PORT) -f -N -L $(L_PORT):127.0.0.1:$(R_PORT) $(SSH_USER)@$(HOST)
-	@echo "✅ tunnel is ready: client port $(L_PORT) -> server port $(R_PORT)"
+	@echo "✔ Tunnel is ready: client port $(L_PORT) -> server port $(R_PORT)"
 
 stop-tunnel:
 	@echo "Closing tunnel to $(HOST) port $(PORT)..."
-	@pkill -f "$(L_PORT):127.0.0.1:$(R_PORT)" && echo "✅ tunnel closed" || echo "[warn] no tunnel found"
+	@pkill -f "$(L_PORT):127.0.0.1:$(R_PORT)" && echo "✔ Tunnel closed" || echo "[warn] no tunnel found"
 
 dev: tunnel run
