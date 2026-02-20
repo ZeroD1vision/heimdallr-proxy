@@ -38,21 +38,34 @@ func main() {
 
 	client := command.NewStatsServiceClient(conn)
 
-	req := &command.GetStatsRequest{
-		Name:   "user>>>zd_pc>>>traffic>>>downlink",
-		Reset_: false,
+	req := &command.QueryStatsRequest{
+		Pattern: "user>>>zd_pc>>>traffic",
+		Reset_:  false,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
 	fmt.Println("Requesting stats from Xray gRPC API...")
-	res, err := client.GetStats(ctx, req)
-
+	res, err := client.QueryStats(ctx, req)
 	if err != nil {
 		log.Fatalf("✘ Error getting stats: %v", err)
 	}
 
-	mb := float64(res.Stat.Value) / 1024 / 1024
-	fmt.Printf("✔ Success!\nUser: zd_pc\nTraffic (downlink): %.2f MB (%d bytes)\n", mb, res.Stat.Value)
+	if res == nil {
+		log.Fatalf("✘ Received nil response from Xray gRPC API")
+	}
+
+	metrics := make(map[string]int64)
+
+	for _, stat := range res.Stat {
+		metrics[stat.Name] = stat.Value
+	}
+
+	down := metrics["user>>>zd_pc>>>traffic>>>downlink"]
+	up := metrics["user>>>zd_pc>>>traffic>>>uplink"]
+	mbDwn := float64(down) / (1024 * 1024)
+	mbUp := float64(up) / (1024 * 1024)
+
+	fmt.Printf("✔ Success!\nUser: zd_pc\nTraffic\n\tdownlink: %.2f MB\n\tuplink: %.2f MB\n", mbDwn, mbUp)
 }
