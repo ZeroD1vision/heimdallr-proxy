@@ -12,8 +12,10 @@ PORT     = $(SSH_PORT)
 L_PORT   = $(CLIENT_TUNNEL_PORT)
 R_PORT   = $(SERVER_TUNNEL_PORT)
 
+deps:
+	@go mod tidy
 # Сборка под текущую ОС
-build:
+build: deps
 	@go build -o bin/heimdallr ./cmd/heimdallr
 
 # Запуск локально
