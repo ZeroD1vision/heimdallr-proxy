@@ -12,15 +12,17 @@ import (
 )
 
 func GetStats() (string, error) {
-	conn, err := grpc.NewClient(fmt.Sprintf("127.0.0.1:%s", os.Getenv("XRAY_STATS_PORT")), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if os.Getenv("XRAY_API_ADDR") == "" {
+		return "", fmt.Errorf("environment variable XRAY_API_ADDR is not set")
+	}
+	conn, err := grpc.NewClient(os.Getenv("XRAY_API_ADDR"), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return "", fmt.Errorf("failed to connect to Xray stats: %w", err)
+		return "", fmt.Errorf("failed to establish grpc connection: %w", err)
 	}
 
 	defer conn.Close()
 
 	client := command.NewStatsServiceClient(conn)
-
 	req := &command.QueryStatsRequest{
 		Pattern: "user>>>zd_pc>>>traffic",
 		Reset_:  false,
@@ -31,10 +33,10 @@ func GetStats() (string, error) {
 
 	res, err := client.QueryStats(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("error getting stats: %w", err)
+		return "", fmt.Errorf("failed to query statistics: %w", err)
 	}
 	if res == nil {
-		return "", fmt.Errorf("received nil response from Xray stats")
+		return "", fmt.Errorf("received empty response from service")
 	}
 
 	metrics := make(map[string]int64)
@@ -48,6 +50,6 @@ func GetStats() (string, error) {
 	mbDwn := float64(down) / (1024 * 1024)
 	mbUp := float64(up) / (1024 * 1024)
 
-	out := fmt.Sprintf("Uplink: %.2f MB, Downlink: %.2f MB\n", mbUp, mbDwn)
+	out := fmt.Sprintf("User: zd_pc\n↑ Uplink: %.2f MB\n↓ Downlink: %.2f MB", mbUp, mbDwn)
 	return out, nil
 }
