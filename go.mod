@@ -3,7 +3,6 @@ module github.com/ZeroD1vision/heimdallr-proxy
 go 1.25.6
 
 require (
-	github.com/joho/godotenv v1.5.1
 	github.com/xtls/xray-core v1.8.24
 	google.golang.org/grpc v1.79.1
 	gopkg.in/telebot.v3 v3.3.8
