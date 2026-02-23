@@ -11,8 +11,8 @@ import (
 )
 
 type Bot struct {
-	api     *telebot.Bot
-	adminID int64
+	Api     *telebot.Bot
+	AdminID int64
 }
 
 func NewBot() (*Bot, error) {
@@ -23,7 +23,7 @@ func NewBot() (*Bot, error) {
 
 	adminID, err := strconv.ParseInt(os.Getenv("TG_ADMIN_ID"), 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("environment variable TG_ADMIN_ID is not set or invalid: %w", err)
+		return nil, fmt.Errorf("invalid TG_ADMIN_ID: %w", err)
 	}
 
 	api, err := telebot.NewBot(telebot.Settings{
@@ -35,29 +35,36 @@ func NewBot() (*Bot, error) {
 	}
 
 	return &Bot{
-		api:     api,
-		adminID: adminID,
+		Api:     api,
+		AdminID: adminID,
 	}, nil
 }
 
 func (b *Bot) Start(getStats func() (string, error)) {
-	b.api.Handle("start", telebot.HandlerFunc(func(c telebot.Context) error {
+	b.Api.Handle("/start", telebot.HandlerFunc(func(c telebot.Context) error {
 		return c.Send("Welcome to Heimdallr Proxy!")
 	}))
 
-	b.api.Handle("stats", telebot.HandlerFunc(func(c telebot.Context) error {
-		if c.Sender().ID != b.adminID {
-			return c.Send("You are not authorized to view stats.")
+	b.Api.Handle("/stats", telebot.HandlerFunc(func(c telebot.Context) error {
+		if c.Sender().ID != b.AdminID {
+			log.Printf("Unauthorized access attempt from user ID: %d", c.Sender().ID)
+			return c.Send("Access denied")
 		}
 
 		stats, err := getStats()
 		if err != nil {
-			log.Println("Error getting stats:", err)
-			return c.Send("Failed to retrieve stats.")
+			log.Printf("Internal error retrieving stats: %v", err)
+			return c.Send("Failed to retrieve statistics")
 		}
 
 		return c.Send(stats)
 	}))
 
-	b.api.Start()
+	maskedID := "*******"
+	adminIDstr := strconv.FormatInt(b.AdminID, 10)
+	if len(adminIDstr) > 3 {
+		maskedID = "*******" + adminIDstr[len(adminIDstr)-3:]
+	}
+	log.Printf("Telegram bot started for admin ID: %s", maskedID)
+	b.Api.Start()
 }
