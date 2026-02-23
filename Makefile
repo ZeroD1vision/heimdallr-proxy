@@ -31,6 +31,6 @@ tunnel:
 
 stop-tunnel:
 	@echo "Closing tunnel to $(HOST) port $(PORT)..."
-	@pkill -f "$(L_PORT):127.0.0.1:$(R_PORT)" && echo "✔ Tunnel closed" || echo "[warn] no tunnel found"
+	@pkill -f "^ssh.*$(L_PORT):127.0.0.1:$(R_PORT)" && echo "✔ Tunnel closed" || echo "[warn] no tunnel found"
 
 dev: tunnel run
