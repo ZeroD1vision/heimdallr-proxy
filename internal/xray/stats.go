@@ -12,7 +12,7 @@ import (
 )
 
 func GetStats() (string, error) {
-	conn, err := grpc.Dial(fmt.Sprintf("127.0.0.1:%s", os.Getenv("XRAY_STATS_PORT")), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(fmt.Sprintf("127.0.0.1:%s", os.Getenv("XRAY_STATS_PORT")), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return "", fmt.Errorf("failed to connect to Xray stats: %w", err)
 	}
