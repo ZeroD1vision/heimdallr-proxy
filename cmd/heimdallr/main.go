@@ -1,71 +1,44 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
-	"time"
+	"strconv"
 
-	"github.com/joho/godotenv"
-	"github.com/xtls/xray-core/app/stats/command"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/bot"
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/xray"
 )
 
 func main() {
-	log.Println("heimdallr-proxy is running...")
-	err := godotenv.Load()
+	// Инициализация логов
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	fmt.Println("✔ heimdallr-proxy initialized")
+
+	tgBot, err := bot.NewBot()
 	if err != nil {
-		val := os.Getenv("APP_ENV")
-		log.Printf("APP_ENV in system: [%s]", val)
-		log.Printf("Error: %v", err)
+		fmt.Printf("✘ Failed to initialize bot: %v\n", err)
+		os.Exit(1)
 	}
+	fmt.Println("✔ Telegram bot module loaded")
 
-	// Тут в будущем мы запустим:
-	// 1. Подключение к БД
-	// 2. gRPC клиент к Xray
-	// 3. Telegram бот
-	// 4. API сервер для Vue
-
-	conn, err := grpc.NewClient(fmt.Sprintf("127.0.0.1:%s", os.Getenv("SERVER_TUNNEL_PORT")), grpc.WithTransportCredentials(insecure.NewCredentials()))
-
+	// Тестовый запрос статистики при запуске
+	log.Println("Performing initial Xray gRPC connectivity check...")
+	_, err = xray.GetStats()
 	if err != nil {
-		log.Fatalf("Failed to connect to Xray gRPC API: %v", err)
+		fmt.Printf("✘ Connectivity check failed: %v\n", err)
+		// Не выходим, так как туннель может подняться позже или Xray быть временно оффлайн
+	} else {
+		fmt.Println("✔ Connection to Xray gRPC API established")
 	}
 
-	defer conn.Close()
-
-	client := command.NewStatsServiceClient(conn)
-
-	req := &command.QueryStatsRequest{
-		Pattern: "user>>>zd_pc>>>traffic",
-		Reset_:  false,
+	maskedID := "*******"
+	adminIDstr := strconv.FormatInt(tgBot.AdminID, 10)
+	if len(adminIDstr) > 3 {
+		maskedID = "*******" + adminIDstr[len(adminIDstr)-3:]
 	}
+	fmt.Printf("✔ Service is running. Admin ID: %s\n", maskedID)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-
-	fmt.Println("Requesting stats from Xray gRPC API...")
-	res, err := client.QueryStats(ctx, req)
-	if err != nil {
-		log.Fatalf("✘ Error getting stats: %v", err)
-	}
-
-	if res == nil {
-		log.Fatalf("✘ Received nil response from Xray gRPC API")
-	}
-
-	metrics := make(map[string]int64)
-
-	for _, stat := range res.Stat {
-		metrics[stat.Name] = stat.Value
-	}
-
-	down := metrics["user>>>zd_pc>>>traffic>>>downlink"]
-	up := metrics["user>>>zd_pc>>>traffic>>>uplink"]
-	mbDwn := float64(down) / (1024 * 1024)
-	mbUp := float64(up) / (1024 * 1024)
-
-	fmt.Printf("✔ Success!\nUser: zd_pc\nTraffic\n\tdownlink: %.2f MB\n\tuplink: %.2f MB\n", mbDwn, mbUp)
+	// Запуск бота
+	tgBot.Start(xray.GetStats)
 }
