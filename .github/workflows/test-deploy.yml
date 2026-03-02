@@ -1,0 +1,43 @@
+name: Manual Test Deploy
+
+on:
+  workflow_dispatch: # Позволяет запускать вручную кнопкой
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest # Самые быстрые и доступные машины
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build Test Binary
+        run: |
+          # Собираем простейший бинарник "hello world" под Linux
+          echo 'package main; import "fmt"; func main() { fmt.Println("Heimdallr Test: Binary is working on Ubuntu 20.04!") }' > test.go
+          GOOS=linux GOARCH=amd64 go build -o heimdallr-test test.go
+
+      - name: Copy to Server via SCP
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_DEPLOY_USER_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: "heimdallr-test"
+          target: "~/" # Кидаем в домашнюю папку юзера
+
+      - name: Execute Test on Server via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_DEPLOY_USER_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            chmod +x ~/heimdallr-test
+            ~/heimdallr-test # Запускаем и смотрим вывод в консоль гита
+            rm ~/heimdallr-test # Удаляем за собой
