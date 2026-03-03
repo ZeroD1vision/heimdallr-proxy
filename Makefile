@@ -12,8 +12,10 @@ PORT     = $(SSH_PORT)
 L_PORT   = $(CLIENT_TUNNEL_PORT)
 R_PORT   = $(SERVER_TUNNEL_PORT)
 
+deps:
+	@go mod tidy
 # Сборка под текущую ОС
-build:
+build: deps
 	@go build -o bin/heimdallr ./cmd/heimdallr
 
 # Запуск локально
@@ -29,6 +31,6 @@ tunnel:
 
 stop-tunnel:
 	@echo "Closing tunnel to $(HOST) port $(PORT)..."
-	@pkill -f "$(L_PORT):127.0.0.1:$(R_PORT)" && echo "✔ Tunnel closed" || echo "[warn] no tunnel found"
+	@pkill -f "^ssh.*$(L_PORT):127.0.0.1:$(R_PORT)" && echo "✔ Tunnel closed" || echo "[warn] no tunnel found"
 
 dev: tunnel run
