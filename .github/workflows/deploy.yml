@@ -26,7 +26,7 @@ jobs:
         
       - name: "Build: Compile Static Binary"
         run: |
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \ 
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
           go build -v -ldflags="-s -w" -o heimdallr ./cmd/heimdallr
           # Did the best i could to reduce the binary size
       - name: "Deploy: Transfer Binary to Server"
