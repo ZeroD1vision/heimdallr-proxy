@@ -1,21 +1,24 @@
 package bot
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
 	telebot "gopkg.in/telebot.v3"
 )
 
 type Bot struct {
 	Api     *telebot.Bot
 	AdminID int64
+	statsProvider models.StatsProvider
 }
 
-func NewBot() (*Bot, error) {
+func NewBot(sp models.StatsProvider) (*Bot, error) {
 	token := os.Getenv("TG_BOT_TOKEN")
 	if token == "" {
 		return nil, fmt.Errorf("environment variable TG_BOT_TOKEN is not set")
@@ -37,10 +40,11 @@ func NewBot() (*Bot, error) {
 	return &Bot{
 		Api:     api,
 		AdminID: adminID,
+		statsProvider: sp,
 	}, nil
 }
 
-func (b *Bot) Start(getStats func() (string, error)) {
+func (b *Bot) Start() {
 	b.Api.Handle("/start", telebot.HandlerFunc(func(c telebot.Context) error {
 		return c.Send("Welcome to Heimdallr Proxy!")
 	}))
@@ -51,13 +55,17 @@ func (b *Bot) Start(getStats func() (string, error)) {
 			return c.Send("Access denied")
 		}
 
-		stats, err := getStats()
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+
+		stats, err := b.statsProvider.GetStats(ctx)
 		if err != nil {
 			log.Printf("Internal error retrieving stats: %v", err)
 			return c.Send("Failed to retrieve statistics")
 		}
 
-		return c.Send(stats)
+    msg := fmt.Sprintf("Статистика:\nEmail: %s\n↓ Down: %d\n↑ Up: %d", stats.Email, stats.Downlink, stats.Uplink)
+		return c.Send(msg)
 	}))
 
 	maskedID := "*******"

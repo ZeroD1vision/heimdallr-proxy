@@ -2,7 +2,9 @@ package api
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -10,18 +12,21 @@ import (
 type Server struct {
 	router *echo.Echo 
 	port string
-	getStatsFn func() (string, error)
+  adminID string
+	getStatsFn func() (models.UserStats, error)
 }
 
-func NewServer(port string, getStats func() (string, error)) *Server {
+func NewServer(port string, getStats func() (models.UserStats, error)) *Server {
 	e := echo.New()
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+  e.Use(middleware.CORS())
 
 	s := &Server{
 		router: e,
 		port: port,
+    adminID: os.Getenv("TG_ADMIN_ID"),
 		getStatsFn: getStats,
 	}
 	
@@ -29,13 +34,13 @@ func NewServer(port string, getStats func() (string, error)) *Server {
 }
 
 func (s *Server) Start() error {
-	s.SetupRoutes("")
+	s.SetupRoutes()
   addr := ":" + s.port
   fmt.Printf("✔ Starting API server on %s\n", addr)
   return s.router.Start(":" + s.port)
 }
 
-func (s *Server) SetupRoutes(user string) {
+func (s *Server) SetupRoutes() {
 	apiRouteGroup := s.router.Group("/api", s.isAdminMiddleware())
 	apiRouteGroup.GET("/stats", s.handleStats)
 }
@@ -54,5 +59,5 @@ func (s *Server) handleStats(c echo.Context) error {
   if err != nil {
     return c.JSON(500, map[string]string{"error": "Failed to get stats"})
   }
-  return c.JSON(200, map[string]string{"stats": stats})
+  return c.JSON(200, stats)
 }
