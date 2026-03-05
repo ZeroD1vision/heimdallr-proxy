@@ -13,10 +13,10 @@ type Server struct {
 	router *echo.Echo 
 	port string
   adminID string
-	getStatsFn func() (models.UserStats, error)
+	statsProvider models.StatsProvider
 }
 
-func NewServer(port string, getStats func() (models.UserStats, error)) *Server {
+func NewServer(port string, statsProvider models.StatsProvider) *Server {
 	e := echo.New()
 
 	e.Use(middleware.Logger())
@@ -27,7 +27,7 @@ func NewServer(port string, getStats func() (models.UserStats, error)) *Server {
 		router: e,
 		port: port,
     adminID: os.Getenv("TG_ADMIN_ID"),
-		getStatsFn: getStats,
+		statsProvider: statsProvider,
 	}
 	
 	return s
@@ -55,7 +55,8 @@ func (s *Server) isAdminMiddleware() echo.MiddlewareFunc {
 }
 
 func (s *Server) handleStats(c echo.Context) error {
-  stats, err := s.getStatsFn()
+  reqCtx := c.Request().Context()
+  stats, err := s.statsProvider.GetStats(reqCtx)
   if err != nil {
     return c.JSON(500, map[string]string{"error": "Failed to get stats"})
   }
