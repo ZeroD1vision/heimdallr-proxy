@@ -13,18 +13,39 @@ import (
 
 type Client struct {
 	apiAddr string
+  conn *grpc.ClientConn
 }
 
 func NewClient(addr string) *Client {
-	return &Client {
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+  if err != nil {
+    fmt.Printf("✘ Failed to establish gRPC connection to Xray API at %s: %v\n", addr, err)
+    // Не выходим, так как туннель может подняться позже или Xray быть временно оффлайн
+    return &Client{
+      apiAddr: addr,
+      conn: nil,
+    }
+  }
+
+  return &Client {
 		apiAddr: addr,
+    conn: conn,
 	}
 }
 
 func (c *Client) GetStats(ctx context.Context) (models.UserStats, error) {
+  if c.conn == nil {
+    conn, err := grpc.NewClient(c.apiAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+    if err != nil {
+      return models.UserStats{}, fmt.Errorf("failed to establish gRPC connection to Xray API at %s: %w", c.apiAddr, err)
+    }
+    c.conn = conn
+  }
+
 	if c.apiAddr == "" {
 		return models.UserStats{}, fmt.Errorf("API address is not set")
 	}
+  
 	conn, err := grpc.NewClient(c.apiAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return models.UserStats{}, fmt.Errorf("failed to establish grpc connection: %w", err)
@@ -54,12 +75,15 @@ func (c *Client) GetStats(ctx context.Context) (models.UserStats, error) {
 		metrics[stat.Name] = stat.Value
 	}
 
-	up := uint64(metrics["user>>>zd_pc>>>traffic>>>uplink"])
-	down := uint64(metrics["user>>>zd_pc>>>traffic>>>downlink"])
+	up := metrics["user>>>zd_pc>>>traffic>>>uplink"]
+	down := metrics["user>>>zd_pc>>>traffic>>>downlink"]
+
+  mbUp := float64(up) / (1024 * 1024)
+  mbDown := float64(down) / (1024 * 1024)
 
 	return models.UserStats{
 		Email:   "zd_pc",
-		Uplink:  up,
-		Downlink: down,
+		Uplink:   mbUp,
+		Downlink: mbDown,
 	}, nil
 }
