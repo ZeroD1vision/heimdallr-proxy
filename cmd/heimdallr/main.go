@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/api"
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/bot"
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/xray"
 )
@@ -16,14 +19,15 @@ func main() {
 	// Инициализация логов
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	fmt.Println("✔ heimdallr-proxy initialized")
-  addr := os.Getenv("XRAY_API_ADDR")
-  if addr == "" {
+  apiAddr := os.Getenv("XRAY_API_ADDR")
+  if apiAddr == "" {
     fmt.Println("✘ XRAY_API_ADDR environment variable is not set")
     defaultAddr := "localhost:10085"
     fmt.Printf("Using default address: %s\n", defaultAddr)
-    addr = defaultAddr
+    apiAddr = defaultAddr
   }
-  xrayClient := xray.NewClient(addr)
+
+  xrayClient := xray.NewClient(apiAddr)
 
 	tgBot, err := bot.NewBot(xrayClient)
 	if err != nil {
@@ -52,6 +56,33 @@ func main() {
 	}
 	fmt.Printf("✔ Service is running. Admin ID: %s\n", maskedID)
 
-	// Запуск бота
-	tgBot.Start()
+  addr := os.Getenv("API_PORT")
+  if addr == "" {
+    log.Printf("API_PORT environment variable is not set, default port 3000")
+    fmt.Println("✘ API_PORT environment variable is not set")
+    defaultPort := "3000"
+    fmt.Printf("Using default port: %s\n", defaultPort)
+    addr = defaultPort
+  }
+  apiServer := api.NewServer(addr, xrayClient)
+
+  stop := make(chan os.Signal, 1)
+  signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+  go func() {
+    err := apiServer.Start()
+    if err != nil {
+      log.Printf("API server error: %v", err)
+      fmt.Printf("✘ API server failed to start: %v\n", err)
+      os.Exit(1)
+    }
+  } ()
+
+  go func() {
+    fmt.Println("✔ Starting Telegram bot...")
+    tgBot.Start()
+  }()
+
+  <-stop
+  fmt.Println("\n✔ Shutting down gracefully...")
 }
