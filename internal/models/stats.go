@@ -3,7 +3,7 @@ package models
 import "context"
 
 type StatsProvider interface {
-	GetStats(ctx context.Context) (string, error)
+	GetStats(ctx context.Context) (UserStats, error)
 }
 
 type UserStats struct {
