@@ -63,8 +63,8 @@ func (b *Bot) Start() {
 			log.Printf("Internal error retrieving stats: %v", err)
 			return c.Send("Failed to retrieve statistics")
 		}
-
-    msg := fmt.Sprintf("Статистика:\nEmail: %s\n↓ Down: %d\n↑ Up: %d", stats.Email, stats.Downlink, stats.Uplink)
+    
+    msg := fmt.Sprintf("Статистика:\nEmail: %s\n↓ Down: %.2f\n↑ Up: %.2f", stats.Email, stats.Downlink, stats.Uplink)
 		return c.Send(msg)
 	}))
 
