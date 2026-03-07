@@ -85,4 +85,11 @@ func main() {
 
 	<-stop
 	fmt.Println("\n✔ Shutting down gracefully...")
+
+  shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+  defer cancel()
+
+  if err := apiServer.Shutdown(shutdownCtx); err != nil {
+    log.Printf("Error during API server shutdown: %v", err)
+  }
 }

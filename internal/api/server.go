@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -61,4 +62,8 @@ func (s *Server) handleStats(c echo.Context) error {
 		return c.JSON(500, map[string]string{"error": "Failed to get stats"})
 	}
 	return c.JSON(200, stats)
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	return s.router.Shutdown(ctx)
 }
