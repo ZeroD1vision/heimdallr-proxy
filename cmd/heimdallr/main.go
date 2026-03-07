@@ -92,4 +92,12 @@ func main() {
   if err := apiServer.Shutdown(shutdownCtx); err != nil {
     log.Printf("Error during API server shutdown: %v", err)
   }
+
+  fmt.Println("✔ API server stopped")
+
+  tgBot.Api.Stop()
+  log.Println("✔ Telegram bot stopped")
+  fmt.Println("✔ Telegram bot stopped")
+  
+  log.Println("✔ Heimdallr-proxy exited")
 }
