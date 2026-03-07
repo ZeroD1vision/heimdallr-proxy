@@ -19,15 +19,15 @@ func main() {
 	// Инициализация логов
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	fmt.Println("✔ heimdallr-proxy initialized")
-  apiAddr := os.Getenv("XRAY_API_ADDR")
-  if apiAddr == "" {
-    fmt.Println("✘ XRAY_API_ADDR environment variable is not set")
-    defaultAddr := "localhost:10085"
-    fmt.Printf("Using default address: %s\n", defaultAddr)
-    apiAddr = defaultAddr
-  }
+	apiAddr := os.Getenv("XRAY_API_ADDR")
+	if apiAddr == "" {
+		fmt.Println("✘ XRAY_API_ADDR environment variable is not set")
+		defaultAddr := "localhost:10085"
+		fmt.Printf("Using default address: %s\n", defaultAddr)
+		apiAddr = defaultAddr
+	}
 
-  xrayClient := xray.NewClient(apiAddr)
+	xrayClient := xray.NewClient(apiAddr)
 
 	tgBot, err := bot.NewBot(xrayClient)
 	if err != nil {
@@ -38,10 +38,10 @@ func main() {
 
 	// Тестовый запрос статистики при запуске
 	log.Println("Performing initial Xray gRPC connectivity check...")
-	
-  ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-  defer cancel()
-  _, err = xrayClient.GetStats(ctx)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = xrayClient.GetStats(ctx)
 	if err != nil {
 		fmt.Printf("✘ Connectivity check failed: %v\n", err)
 		// Не выходим, так как туннель может подняться позже или Xray быть временно оффлайн
@@ -56,33 +56,33 @@ func main() {
 	}
 	fmt.Printf("✔ Service is running. Admin ID: %s\n", maskedID)
 
-  addr := os.Getenv("API_PORT")
-  if addr == "" {
-    log.Printf("API_PORT environment variable is not set, default port 3000")
-    fmt.Println("✘ API_PORT environment variable is not set")
-    defaultPort := "3000"
-    fmt.Printf("Using default port: %s\n", defaultPort)
-    addr = defaultPort
-  }
-  apiServer := api.NewServer(addr, xrayClient)
+	addr := os.Getenv("API_PORT")
+	if addr == "" {
+		log.Printf("API_PORT environment variable is not set, default port 3000")
+		fmt.Println("✘ API_PORT environment variable is not set")
+		defaultPort := "3000"
+		fmt.Printf("Using default port: %s\n", defaultPort)
+		addr = defaultPort
+	}
+	apiServer := api.NewServer(addr, xrayClient)
 
-  stop := make(chan os.Signal, 1)
-  signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-  go func() {
-    err := apiServer.Start()
-    if err != nil {
-      log.Printf("API server error: %v", err)
-      fmt.Printf("✘ API server failed to start: %v\n", err)
-      os.Exit(1)
-    }
-  } ()
+	go func() {
+		err := apiServer.Start()
+		if err != nil {
+			log.Printf("API server error: %v", err)
+			fmt.Printf("✘ API server failed to start: %v\n", err)
+			os.Exit(1)
+		}
+	}()
 
-  go func() {
-    fmt.Println("✔ Starting Telegram bot...")
-    tgBot.Start()
-  }()
+	go func() {
+		fmt.Println("✔ Starting Telegram bot...")
+		tgBot.Start()
+	}()
 
-  <-stop
-  fmt.Println("\n✔ Shutting down gracefully...")
+	<-stop
+	fmt.Println("\n✔ Shutting down gracefully...")
 }

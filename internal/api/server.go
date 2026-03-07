@@ -10,9 +10,9 @@ import (
 )
 
 type Server struct {
-	router *echo.Echo 
-	port string
-  adminID string
+	router        *echo.Echo
+	port          string
+	adminID       string
 	statsProvider models.StatsProvider
 }
 
@@ -21,23 +21,23 @@ func NewServer(port string, statsProvider models.StatsProvider) *Server {
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
-  e.Use(middleware.CORS())
+	e.Use(middleware.CORS())
 
 	s := &Server{
-		router: e,
-		port: port,
-    adminID: os.Getenv("TG_ADMIN_ID"),
+		router:        e,
+		port:          port,
+		adminID:       os.Getenv("TG_ADMIN_ID"),
 		statsProvider: statsProvider,
 	}
-	
+
 	return s
 }
 
 func (s *Server) Start() error {
 	s.SetupRoutes()
-  addr := ":" + s.port
-  fmt.Printf("✔ Starting API server on %s\n", addr)
-  return s.router.Start(":" + s.port)
+	addr := ":" + s.port
+	fmt.Printf("✔ Starting API server on %s\n", addr)
+	return s.router.Start(":" + s.port)
 }
 
 func (s *Server) SetupRoutes() {
@@ -55,10 +55,10 @@ func (s *Server) isAdminMiddleware() echo.MiddlewareFunc {
 }
 
 func (s *Server) handleStats(c echo.Context) error {
-  reqCtx := c.Request().Context()
-  stats, err := s.statsProvider.GetStats(reqCtx)
-  if err != nil {
-    return c.JSON(500, map[string]string{"error": "Failed to get stats"})
-  }
-  return c.JSON(200, stats)
+	reqCtx := c.Request().Context()
+	stats, err := s.statsProvider.GetStats(reqCtx)
+	if err != nil {
+		return c.JSON(500, map[string]string{"error": "Failed to get stats"})
+	}
+	return c.JSON(200, stats)
 }

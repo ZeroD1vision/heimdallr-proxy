@@ -13,8 +13,8 @@ import (
 )
 
 type Bot struct {
-	Api     *telebot.Bot
-	AdminID int64
+	Api           *telebot.Bot
+	AdminID       int64
 	statsProvider models.StatsProvider
 }
 
@@ -38,8 +38,8 @@ func NewBot(sp models.StatsProvider) (*Bot, error) {
 	}
 
 	return &Bot{
-		Api:     api,
-		AdminID: adminID,
+		Api:           api,
+		AdminID:       adminID,
 		statsProvider: sp,
 	}, nil
 }
@@ -55,16 +55,16 @@ func (b *Bot) Start() {
 			return c.Send("Access denied")
 		}
 
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
 		stats, err := b.statsProvider.GetStats(ctx)
 		if err != nil {
 			log.Printf("Internal error retrieving stats: %v", err)
 			return c.Send("Failed to retrieve statistics")
 		}
-    
-    msg := fmt.Sprintf("Статистика:\nEmail: %s\n↓ Down: %.2f\n↑ Up: %.2f", stats.Email, stats.Downlink, stats.Uplink)
+
+		msg := fmt.Sprintf("Статистика:\nEmail: %s\n↓ Down: %.2f\n↑ Up: %.2f", stats.Email, stats.Downlink, stats.Uplink)
 		return c.Send(msg)
 	}))
 
