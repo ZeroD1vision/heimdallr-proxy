@@ -7,7 +7,7 @@ type StatsProvider interface {
 }
 
 type UserStats struct {
-	Email string `json:"email"`
+	Email    string  `json:"email"`
 	Downlink float64 `json:"downlink"`
-	Uplink float64 `json:"uplink"`
+	Uplink   float64 `json:"uplink"`
 }
