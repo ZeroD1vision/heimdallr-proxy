@@ -84,20 +84,28 @@ func main() {
 	}()
 
 	<-stop
-	fmt.Println("\n✔ Shutting down gracefully...")
 
-  shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-  defer cancel()
+	log.Println("Shutting down gracefully...")
+	ShutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-  if err := apiServer.Shutdown(shutdownCtx); err != nil {
-    log.Printf("Error during API server shutdown: %v", err)
-  }
+	// 1. Останавливаем API сервер
+	if err := apiServer.Shutdown(ShutdownCtx); err != nil {
+		log.Printf("✘ API server shutdown error: %v\n", err)
+	} else {
+		log.Println("✔ API server stopped")
+	}
 
-  fmt.Println("✔ API server stopped")
+	// 2. Останавливаем Telegram бота
+	tgBot.Api.Stop()
+	log.Println("✔ Telegram bot stopped")
 
-  tgBot.Api.Stop()
-  log.Println("✔ Telegram bot stopped")
-  fmt.Println("✔ Telegram bot stopped")
-  
-  log.Println("✔ Heimdallr-proxy exited")
+	// 3. ЗАКРЫВАЕМ gRPC соединение
+	if err := xrayClient.Close(); err != nil {
+		log.Printf("✘ Xray gRPC connection close error: %v\n", err)
+	} else {
+		log.Println("✔ Xray gRPC connection closed")
+	}
+
+	log.Println("✔ Heimdallr-proxy exited")
 }
