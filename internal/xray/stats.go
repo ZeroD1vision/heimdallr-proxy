@@ -46,14 +46,7 @@ func (c *Client) GetStats(ctx context.Context) (models.UserStats, error) {
 		return models.UserStats{}, fmt.Errorf("API address is not set")
 	}
 
-	conn, err := grpc.NewClient(c.apiAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return models.UserStats{}, fmt.Errorf("failed to establish grpc connection: %w", err)
-	}
-
-	defer conn.Close()
-
-	client := command.NewStatsServiceClient(conn)
+	client := command.NewStatsServiceClient(c.conn)
 	req := &command.QueryStatsRequest{
 		Pattern: "user>>>zd_pc>>>traffic",
 		Reset_:  false,
@@ -86,4 +79,11 @@ func (c *Client) GetStats(ctx context.Context) (models.UserStats, error) {
 		Uplink:   mbUp,
 		Downlink: mbDown,
 	}, nil
+}
+
+func (c *Client) Close() error {
+	if c.conn != nil {
+		return c.conn.Close()
+	}
+	return nil
 }
