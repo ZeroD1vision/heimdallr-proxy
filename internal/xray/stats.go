@@ -3,6 +3,7 @@ package xray
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
@@ -37,6 +38,10 @@ func (c *Client) GetStats(ctx context.Context) (models.UserStats, error) {
 	if c.conn == nil {
 		conn, err := grpc.NewClient(c.apiAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
+			slog.Error("Failed to establish gRPC connection to Xray API",
+				"api_addr", c.apiAddr,
+				"error", err,
+			)
 			return models.UserStats{}, fmt.Errorf("failed to establish gRPC connection to Xray API at %s: %w", c.apiAddr, err)
 		}
 		c.conn = conn
@@ -52,10 +57,10 @@ func (c *Client) GetStats(ctx context.Context) (models.UserStats, error) {
 		Reset_:  false,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	res, err := client.QueryStats(ctx, req)
+	res, err := client.QueryStats(timeoutCtx, req)
 	if err != nil {
 		return models.UserStats{}, fmt.Errorf("failed to query statistics: %w", err)
 	}
@@ -83,6 +88,7 @@ func (c *Client) GetStats(ctx context.Context) (models.UserStats, error) {
 
 func (c *Client) Close() error {
 	if c.conn != nil {
+		slog.Info("Closing grpc connection", "addr", c.apiAddr)
 		return c.conn.Close()
 	}
 	return nil

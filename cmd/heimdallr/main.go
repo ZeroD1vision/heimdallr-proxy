@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strconv"
@@ -17,48 +17,63 @@ import (
 
 func main() {
 	// Инициализация логов
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	fmt.Println("✔ heimdallr-proxy initialized")
-	apiAddr := os.Getenv("XRAY_API_ADDR")
-	if apiAddr == "" {
-		fmt.Println("✘ XRAY_API_ADDR environment variable is not set")
-		defaultAddr := "localhost:10085"
-		fmt.Printf("Using default address: %s\n", defaultAddr)
-		apiAddr = defaultAddr
-	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
 
-	xrayClient := xray.NewClient(apiAddr)
+	// Функция-помощник для красивого вывода в терминал без дублирования в логи
+    printStatus := func(msg string, err error) {
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "✘ %s: %v\n", msg, err)
+            slog.Error(msg, "error", err) // В лог пишем только ошибку
+        } else {
+            fmt.Fprintf(os.Stderr, "✔ %s\n", msg)
+            // Успешные шаги инициализации в логи можно не писать, чтобы не раздувать их
+        }
+    }
+
+	slog.Info("heimdallr-proxy initialized", "version", "1.0.0")
+	fmt.Println("✔ heimdallr-proxy initialized")
+
+	// 1. Xray Client
+    apiAddr := os.Getenv("XRAY_API_ADDR")
+    if apiAddr == "" {
+        apiAddr = "localhost:10085"
+        slog.Warn("XRAY_API_ADDR not set", "using", apiAddr)
+    }
+    xrayClient := xray.NewClient(apiAddr)
+    printStatus("Xray client initialized", nil)
 
 	tgBot, err := bot.NewBot(xrayClient)
 	if err != nil {
 		fmt.Printf("✘ Failed to initialize bot: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("✔ Telegram bot module loaded")
+	printStatus("Telegram bot module loaded", nil)
 
 	// Тестовый запрос статистики при запуске
-	log.Println("Performing initial Xray gRPC connectivity check...")
+	slog.Info("Performing initial Xray gRPC connectivity check...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_, err = xrayClient.GetStats(ctx)
-	if err != nil {
-		fmt.Printf("✘ Connectivity check failed: %v\n", err)
-		// Не выходим, так как туннель может подняться позже или Xray быть временно оффлайн
-	} else {
-		fmt.Println("✔ Connection to Xray gRPC API established")
-	}
+	// 3. Connectivity Check (логируем только если упало)
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    _, err = xrayClient.GetStats(ctx)
+    cancel()
+    if err != nil {
+        printStatus("Initial connectivity check (Xray might be offline)", err)
+    } else {
+        printStatus("Connection to Xray gRPC API established", nil)
+    }
 
 	maskedID := "*******"
 	adminIDstr := strconv.FormatInt(tgBot.AdminID, 10)
 	if len(adminIDstr) > 3 {
 		maskedID = "*******" + adminIDstr[len(adminIDstr)-3:]
 	}
-	fmt.Printf("✔ Service is running. Admin ID: %s\n", maskedID)
+	slog.Info("Service is running", "admin_id", maskedID)
+	printStatus("Service is running", nil)
 
 	addr := os.Getenv("API_PORT")
 	if addr == "" {
-		log.Printf("API_PORT environment variable is not set, default port 3000")
+		slog.Info("API_PORT environment variable is not set, default port 3000")
 		fmt.Println("✘ API_PORT environment variable is not set")
 		defaultPort := "3000"
 		fmt.Printf("Using default port: %s\n", defaultPort)
@@ -69,14 +84,13 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	go func() {
-		err := apiServer.Start()
-		if err != nil {
-			log.Printf("API server error: %v", err)
-			fmt.Printf("✘ API server failed to start: %v\n", err)
-			os.Exit(1)
-		}
-	}()
+	// 4. Запуск серверов
+    go func() {
+        if err := apiServer.Start(); err != nil {
+            slog.Error("API server failed", "error", err)
+            os.Exit(1)
+        }
+    }()
 
 	go func() {
 		fmt.Println("✔ Starting Telegram bot...")
@@ -85,27 +99,27 @@ func main() {
 
 	<-stop
 
-	log.Println("Shutting down gracefully...")
+	printStatus("Shutting down gracefully...", nil)
 	ShutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// 1. Останавливаем API сервер
 	if err := apiServer.Shutdown(ShutdownCtx); err != nil {
-		log.Printf("✘ API server shutdown error: %v\n", err)
+		printStatus("API server shutdown error", err)
 	} else {
-		log.Println("✔ API server stopped")
+		printStatus("API server stopped", nil)
 	}
 
 	// 2. Останавливаем Telegram бота
 	tgBot.Api.Stop()
-	log.Println("✔ Telegram bot stopped")
+	printStatus("Telegram bot stopped", nil)
 
 	// 3. ЗАКРЫВАЕМ gRPC соединение
 	if err := xrayClient.Close(); err != nil {
-		log.Printf("✘ Xray gRPC connection close error: %v\n", err)
+		printStatus("Failed to close Xray gRPC connection", err)
 	} else {
-		log.Println("✔ Xray gRPC connection closed")
+		printStatus("Xray gRPC connection closed", nil)
 	}
 
-	log.Println("✔ Heimdallr-proxy exited")
+	printStatus("Heimdallr-proxy exited", nil)
 }

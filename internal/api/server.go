@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
@@ -38,6 +39,7 @@ func (s *Server) Start() error {
 	s.SetupRoutes()
 	addr := ":" + s.port
 	fmt.Printf("✔ Starting API server on %s\n", addr)
+	slog.Info("api server started", "port", s.port)
 	return s.router.Start(":" + s.port)
 }
 
@@ -59,11 +61,20 @@ func (s *Server) handleStats(c echo.Context) error {
 	reqCtx := c.Request().Context()
 	stats, err := s.statsProvider.GetStats(reqCtx)
 	if err != nil {
-		return c.JSON(500, map[string]string{"error": "Failed to get stats"})
+		slog.Error("failed to fetch xray stats", 
+            "error", err, 
+            "remote_ip", c.RealIP(),
+            "request_id", c.Response().Header().Get(echo.HeaderXRequestID),
+        )
+		return c.JSON(500, map[string]string{
+            "status": "error",
+            "message": "Internal service error",
+        })
 	}
 	return c.JSON(200, stats)
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	slog.Info("Shutting down API server...")
 	return s.router.Shutdown(ctx)
 }

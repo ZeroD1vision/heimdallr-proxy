@@ -3,7 +3,7 @@ package bot
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
@@ -46,12 +46,19 @@ func NewBot(sp models.StatsProvider) (*Bot, error) {
 
 func (b *Bot) Start() {
 	b.Api.Handle("/start", telebot.HandlerFunc(func(c telebot.Context) error {
+		slog.Info("bot command received", "command", "/start", "user_id", c.Sender().ID)
 		return c.Send("Welcome to Heimdallr Proxy!")
 	}))
 
 	b.Api.Handle("/stats", telebot.HandlerFunc(func(c telebot.Context) error {
+		slog.Info("bot command received", "command", "/stats", "user_id", c.Sender().ID)
 		if c.Sender().ID != b.AdminID {
-			log.Printf("Unauthorized access attempt from user ID: %d", c.Sender().ID)
+			slog.Warn("Unauthorized access attempt to /stats command", 
+				"user_id", c.Sender().ID,
+				"username", c.Sender().Username,
+			)
+			slog.Error("Unauthorized access attempt to /stats command", "user_id", c.Sender().ID)
+			
 			return c.Send("Access denied")
 		}
 
@@ -60,7 +67,7 @@ func (b *Bot) Start() {
 
 		stats, err := b.statsProvider.GetStats(ctx)
 		if err != nil {
-			log.Printf("Internal error retrieving stats: %v", err)
+			slog.Error("Internal error retrieving stats", "error", err)
 			return c.Send("Failed to retrieve statistics")
 		}
 
@@ -73,6 +80,6 @@ func (b *Bot) Start() {
 	if len(adminIDstr) > 3 {
 		maskedID = "*******" + adminIDstr[len(adminIDstr)-3:]
 	}
-	log.Printf("Telegram bot started for admin ID: %s", maskedID)
+	slog.Info("Telegram bot started", "admin_id", maskedID)
 	b.Api.Start()
 }
