@@ -1,0 +1,8 @@
+$kind: collection
+name: Heimdallr API
+auth:
+  - id: 93b072ae-6908-4bab-83b7-10569c1cbde7
+    type: bearer
+    name: Bearer Token
+    credentials:
+      token: "{{api_token}}"
