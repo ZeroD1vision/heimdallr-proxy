@@ -1,0 +1,13 @@
+$kind: http-request
+name: New Request
+url: http://127.0.0.1:3000/api/stats
+method: GET
+headers:
+  Connection: close
+auth:
+  type: inherit
+  credentials:
+    id: 93b072ae-6908-4bab-83b7-10569c1cbde7
+settings:
+  protocolVersion: http1
+order: 1773569055303
