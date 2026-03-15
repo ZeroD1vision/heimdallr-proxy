@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
@@ -16,6 +18,7 @@ type Server struct {
 	port          string
 	adminID       string
 	statsProvider models.StatsProvider
+	apiKey        string
 }
 
 func NewServer(port string, statsProvider models.StatsProvider) *Server {
@@ -30,6 +33,7 @@ func NewServer(port string, statsProvider models.StatsProvider) *Server {
 		port:          port,
 		adminID:       os.Getenv("TG_ADMIN_ID"),
 		statsProvider: statsProvider,
+		apiKey:        os.Getenv("API_ADMIN_TOKEN"),
 	}
 
 	return s
@@ -51,10 +55,31 @@ func (s *Server) SetupRoutes() {
 func (s *Server) isAdminMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// TODO: Implement actual admin check logic here, e.g., check cookies mb
+			adminToken := os.Getenv("API_ADMIN_TOKEN")
+			authHeader := c.Request().Header.Get("Authorization")
+
+			if authHeader == "" || !secureCompare(authHeader, "Bearer "+adminToken) { // Use secure comparison to prevent timing attacks
+				slog.Warn("Unauthorized access attempt to API endpoint", 
+					"remote_ip", c.RealIP(), 
+					"request_id", c.Response().Header().Get(echo.HeaderXRequestID))
+				
+				return c.JSON(http.StatusUnauthorized, map[string]string{
+					"error": "Unauthorized access. Key is missing or invalid.",
+				})
+			}
 			return next(c)
 		}
 	}
+}
+
+func secureCompare(given string, expected string) bool {
+	// Use constant time comparison to prevent timing attacks
+	g, e := []byte(given), []byte(expected)
+	// Check if lengths are equal first to avoid unnecessary comparison
+	if subtle.ConstantTimeEq(int32(len(g)), int32(len(e))) == 0 { 
+		return false
+	}
+	return subtle.ConstantTimeCompare(g, e) == 1 // Return true if they match, false otherwise
 }
 
 func (s *Server) handleStats(c echo.Context) error {
