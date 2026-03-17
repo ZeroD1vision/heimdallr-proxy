@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -37,6 +38,11 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("database initialized", "path", cfg.dbPath)
+	
+	// Чистим просроченные OTP при старте — не накапливаем мусор
+	if err := store.DeleteExpiredOTPs(context.Background()); err != nil {
+		slog.Warn("failed to clean expired otps on startup", "error", err)
+	}
 
 	// -------------------------------------------------------------------------
 	// 4. Xray gRPC клиент
@@ -73,15 +79,9 @@ func main() {
 	defer collectorCancel()
 	go statsCollector.Run(collectorCtx)
 
+	
 	// -------------------------------------------------------------------------
-	// 6. API сервер
-	// -------------------------------------------------------------------------
-	// store реализует api.HistoryProvider — есть метод GetHistory.
-	// xrayClient реализует api.StatsProvider — есть метод GetUserStats.
-	apiServer := api.NewServer(cfg.apiPort, cfg.apiKey, cfg.adminEmail, xrayClient, store)
-
-	// -------------------------------------------------------------------------
-	// 7. Telegram бот
+	// 6. Telegram бот
 	// -------------------------------------------------------------------------
 	// xrayClient реализует bot.StatsProvider — есть метод GetUserStats.
 	tgBot, err := bot.NewBot(xrayClient, cfg.adminEmail)
@@ -89,7 +89,24 @@ func main() {
 		slog.Error("failed to initialize telegram bot", "error", err)
 		os.Exit(1)
 	}
-
+	
+	// -------------------------------------------------------------------------
+	// 7. API сервер
+	// -------------------------------------------------------------------------
+	// tgBot реализует api.Notifier (метод SendOTP)
+	// store реализует api.OTPStore и api.HistoryProvider
+	// xrayClient реализует api.StatsProvider
+	apiServer := api.NewServer(
+		cfg.apiPort,
+		cfg.apiKey,
+		cfg.jwtSecret,
+		cfg.adminEmail,
+		cfg.adminTelegramID,
+		xrayClient,
+		store,
+		store,
+		tgBot,
+	)
 	// -------------------------------------------------------------------------
 	// 8. Запуск
 	// -------------------------------------------------------------------------
@@ -123,12 +140,12 @@ func main() {
 	defer shutdownCancel()
 
 	collectorCancel() // 1. Коллектор — перестаём писать в БД
+	
+	tgBot.Api.Stop() // 2. Бот
 
-	if err := apiServer.Shutdown(shutdownCtx); err != nil { // 2. API
+	if err := apiServer.Shutdown(shutdownCtx); err != nil { // 3. API
 		slog.Error("api server shutdown error", "error", err)
 	}
-
-	tgBot.Api.Stop() // 3. Бот
 
 	if err := xrayClient.Close(); err != nil { // 4. gRPC
 		slog.Error("xray client close error", "error", err)
@@ -138,26 +155,41 @@ func main() {
 }
 
 type config struct {
-	dbPath     string
-	xrayAddr   string
-	apiPort    string
-	apiKey     string
-	adminEmail string
+	dbPath          string
+	xrayAddr        string
+	apiPort         string
+	apiKey          string
+	jwtSecret       string
+	adminEmail      string
+	adminTelegramID int64
 	collectInterval time.Duration
 }
 
 func loadConfig() config {
+	adminIDStr := getEnv("TG_ADMIN_ID", "0")
+	adminTelegramID, err := strconv.ParseInt(adminIDStr, 10, 64)
+	if err != nil {
+	    slog.Warn("invalid TG_ADMIN_ID, using 0", "value", adminIDStr)
+	    adminTelegramID = 0
+	}
 	cfg := config{
-		dbPath:     getEnv("DB_PATH", "data/heimdallr.db"),
-		xrayAddr:   getEnv("XRAY_API_ADDR", "localhost:10085"),
-		apiPort:    getEnv("API_PORT", "3000"),
-		apiKey:     os.Getenv("API_ADMIN_TOKEN"),
-		adminEmail: getEnv("ADMIN_EMAIL", "zd_pc"),
+		dbPath:          getEnv("DB_PATH", "data/heimdallr.db"),
+		xrayAddr:        getEnv("XRAY_API_ADDR", "localhost:10085"),
+		apiPort:         getEnv("API_PORT", "3000"),
+		apiKey:          os.Getenv("API_ADMIN_TOKEN"),
+		jwtSecret:       os.Getenv("JWT_SECRET"),
+		adminEmail:      getEnv("ADMIN_EMAIL", "zd_pc"),
+		adminTelegramID: adminTelegramID,
 		collectInterval: parseDuration("COLLECT_INTERVAL", 30*time.Second),
 	}
 
 	if cfg.apiKey == "" {
 		slog.Error("API_ADMIN_TOKEN is not set")
+		os.Exit(1)
+	}
+
+	if cfg.jwtSecret == "" {
+		slog.Error("JWT_SECRET is not set")
 		os.Exit(1)
 	}
 
