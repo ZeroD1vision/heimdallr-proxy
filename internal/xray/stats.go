@@ -3,7 +3,6 @@ package xray
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
@@ -13,85 +12,95 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// Client — низкоуровневый gRPC клиент к Xray Stats API.
+// Не логирует — только возвращает ошибки. Логирование на стороне вызывающего кода.
 type Client struct {
 	apiAddr string
 	conn    *grpc.ClientConn
 }
 
-func NewClient(addr string) *Client {
+// NewClient создаёт клиент. При ошибке соединения не падает — Xray может
+// подняться позже (например, туннель ещё не установлен). Ошибку первого
+// соединения логирует вызывающий код через проверку после NewClient.
+func NewClient(addr string) (*Client, error) {
+	if addr == "" {
+		return nil, fmt.Errorf("xray api address must not be empty")
+	}
+
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		fmt.Printf("✘ Failed to establish gRPC connection to Xray API at %s: %v\n", addr, err)
-		// Не выходим, так как туннель может подняться позже или Xray быть временно оффлайн
-		return &Client{
-			apiAddr: addr,
-			conn:    nil,
-		}
+		// Возвращаем клиент без соединения — reconnect произойдёт при первом вызове.
+		// Ошибку тоже возвращаем, чтобы main мог залогировать предупреждение.
+		return &Client{apiAddr: addr, conn: nil}, fmt.Errorf("initial grpc dial %s: %w", addr, err)
 	}
 
-	return &Client{
-		apiAddr: addr,
-		conn:    conn,
-	}
+	return &Client{apiAddr: addr, conn: conn}, nil
 }
 
-func (c *Client) GetStats(ctx context.Context) (models.UserStats, error) {
-	if c.conn == nil || c.conn.GetState() == connectivity.Shutdown {
-		slog.Info("gRPC connection is dead, reconnecting...")
-		conn, err := grpc.NewClient(c.apiAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			slog.Error("Failed to establish gRPC connection to Xray API",
-				"api_addr", c.apiAddr,
-				"error", err,
-			)
-			return models.UserStats{}, fmt.Errorf("failed to establish gRPC connection to Xray API at %s: %w", c.apiAddr, err)
-		}
-		c.conn = conn
-	}
-
-	if c.apiAddr == "" {
-		return models.UserStats{}, fmt.Errorf("API address is not set")
+// GetUserStats получает статистику трафика для конкретного пользователя по email.
+// email — идентификатор пользователя в конфиге Xray (поле "email" в inbound).
+func (c *Client) GetUserStats(ctx context.Context, email string) (models.UserStats, error) {
+	if err := c.ensureConnected(); err != nil {
+		return models.UserStats{}, err
 	}
 
 	client := command.NewStatsServiceClient(c.conn)
+
+	// Xray Stats API: паттерн "user>>>EMAIL>>>traffic" возвращает uplink + downlink.
 	req := &command.QueryStatsRequest{
-		Pattern: "user>>>zd_pc>>>traffic",
+		Pattern: fmt.Sprintf("user>>>%s>>>traffic", email),
 		Reset_:  false,
 	}
 
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	// Создаём собственный таймаут поверх входящего ctx — gRPC вызов не должен висеть вечно.
+	queryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	res, err := client.QueryStats(timeoutCtx, req)
+	res, err := client.QueryStats(queryCtx, req)
 	if err != nil {
-		return models.UserStats{}, fmt.Errorf("failed to query statistics: %w", err)
+		return models.UserStats{}, fmt.Errorf("query xray stats for %s: %w", email, err)
 	}
 	if res == nil {
-		return models.UserStats{}, fmt.Errorf("received empty response from service")
+		return models.UserStats{}, fmt.Errorf("empty response from xray stats api for %s", email)
 	}
 
-	metrics := make(map[string]int64)
+	// Раскладываем ответ в карту для удобного доступа по имени метрики.
+	metrics := make(map[string]int64, len(res.Stat))
 	for _, stat := range res.Stat {
 		metrics[stat.Name] = stat.Value
 	}
 
-	up := metrics["user>>>zd_pc>>>traffic>>>uplink"]
-	down := metrics["user>>>zd_pc>>>traffic>>>downlink"]
-
-	mbUp := float64(up) / (1024 * 1024)
-	mbDown := float64(down) / (1024 * 1024)
+	// Xray возвращает байты — конвертируем в мегабайты для отображения.
+	upBytes := metrics[fmt.Sprintf("user>>>%s>>>traffic>>>uplink", email)]
+	downBytes := metrics[fmt.Sprintf("user>>>%s>>>traffic>>>downlink", email)]
 
 	return models.UserStats{
-		Email:    "zd_pc",
-		Uplink:   mbUp,
-		Downlink: mbDown,
+		Email:    email,
+		Uplink:   upBytes,
+		Downlink: downBytes,
 	}, nil
 }
 
+// Close закрывает gRPC соединение. Вызывать при graceful shutdown.
 func (c *Client) Close() error {
 	if c.conn != nil {
-		slog.Info("Closing grpc connection", "addr", c.apiAddr)
 		return c.conn.Close()
 	}
+	return nil
+}
+
+// ensureConnected проверяет соединение и переподключается если нужно.
+// Выделено в отдельный метод чтобы не засорять GetUserStats.
+func (c *Client) ensureConnected() error {
+	if c.conn != nil && c.conn.GetState() != connectivity.Shutdown {
+		return nil
+	}
+
+	conn, err := grpc.NewClient(c.apiAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("reconnect to xray api at %s: %w", c.apiAddr, err)
+	}
+
+	c.conn = conn
 	return nil
 }
