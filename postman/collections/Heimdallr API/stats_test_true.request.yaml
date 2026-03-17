@@ -1,0 +1,15 @@
+$kind: http-request
+name: stats_test_true
+url: http://127.0.0.1:3000/api/stats
+method: GET
+headers:
+  - key: Connection
+    value: close
+auth:
+  credentials:
+    - key: id
+      value: 93b072ae-6908-4bab-83b7-10569c1cbde7
+  type: inherit
+settings:
+  protocolVersion: http1
+order: 1773569055303

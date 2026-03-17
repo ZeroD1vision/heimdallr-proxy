@@ -1,0 +1,15 @@
+$kind: http-request
+name: stats_test_history
+url: http://127.0.0.1:3000/api/history?limit=10
+method: GET
+headers:
+  Connection: close
+queryParams:
+  limit: "10"
+auth:
+  type: inherit
+  credentials:
+    id: 93b072ae-6908-4bab-83b7-10569c1cbde7
+settings:
+  protocolVersion: http1
+order: 2277186337599720
