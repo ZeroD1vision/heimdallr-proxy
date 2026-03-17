@@ -2,6 +2,8 @@ package db
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
 	"gorm.io/driver/sqlite"
@@ -17,6 +19,12 @@ type Store struct {
 }
 
 func NewStore(dsn string) (*Store, error) {
+	// SQLite создаёт файл сам, но директория должна существовать заранее.
+	dir := filepath.Dir(dsn)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("create db directory %s: %w", dir, err)
+	}
+
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
@@ -25,7 +33,11 @@ func NewStore(dsn string) (*Store, error) {
     }
 
 	// Автомиграция создает таблицы по указанным моделям при запуске
-    if err := db.AutoMigrate(&models.User{}, &models.UserHistory{}); err != nil {
+    if err := db.AutoMigrate(
+		&models.User{}, 
+		&models.UserHistory{},
+		&models.OTPCode{},
+	); err != nil {
         return nil, fmt.Errorf("migration failed: %w", err)
     }
 	
