@@ -3,6 +3,7 @@ module github.com/ZeroD1vision/heimdallr-proxy
 go 1.25.6
 
 require (
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/labstack/echo/v4 v4.15.1
 	github.com/xtls/xray-core v1.8.24
 	google.golang.org/grpc v1.79.1
