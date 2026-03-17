@@ -47,3 +47,14 @@ type User struct {
 	TrafficLimit int64  `json:"traffic_limit"` // байты, 0 = без лимита
 	State        string `json:"state"         gorm:"default:'active'"` // active | blocked | pending
 }
+
+// OTPCode — одноразовый код для 2FA.
+// TTL контролируется полем ExpiresAt — фоновая чистка удаляет просроченные записи.
+// Один активный код на пользователя — при запросе нового старый перезаписывается.
+type OTPCode struct {
+	ID        uint      `json:"id"         gorm:"primaryKey"`
+	AdminID   int64     `json:"admin_id"   gorm:"uniqueIndex;not null"`
+	Code      string    `json:"-"          gorm:"not null"`
+	ExpiresAt time.Time `json:"expires_at" gorm:"not null"`
+	Used      bool      `json:"-"          gorm:"default:false"`
+}

@@ -55,6 +55,22 @@ func (b *Bot) Start() {
 	b.Api.Start()
 }
 
+// SendOTP отправляет одноразовый код администратору в Telegram.
+// Реализует интерфейс api.Notifier — сервер вызывает этот метод при запросе 2FA.
+// Метод публичный и принимает конкретный telegramID — в будущем можно слать разным юзерам.
+func (b *Bot) SendOTP(ctx context.Context, telegramID int64, code string) error {
+	recipient := &telebot.User{ID: telegramID}
+	msg := fmt.Sprintf(
+		"Ваш код подтверждения: <b>%s</b>\n\nДействует 5 минут. Никому не сообщайте.",
+		code,
+	)
+	_, err := b.Api.Send(recipient, msg, telebot.ModeHTML)
+	if err != nil {
+		return fmt.Errorf("send otp to telegram_id %d: %w", telegramID, err)
+	}
+	return nil
+}
+
 func (b *Bot) handleStart(c telebot.Context) error {
 	slog.Info("bot command received", "command", "/start", "user_id", c.Sender().ID)
 	return c.Send("Welcome to Heimdallr Proxy!")

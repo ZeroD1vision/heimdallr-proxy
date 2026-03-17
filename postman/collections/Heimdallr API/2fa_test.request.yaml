@@ -1,0 +1,19 @@
+$kind: http-request
+name: 2fa_test
+url: http://localhost:3000/api/auth/request-otp
+method: POST
+headers:
+  Connection: close
+body:
+  type: json
+  content: |-
+    {
+        "telegram_id": 1235295181
+    }
+auth:
+  credentials:
+    id: 93b072ae-6908-4bab-83b7-10569c1cbde7
+  type: inherit
+settings:
+  protocolVersion: http1
+order: 4437432993904485
