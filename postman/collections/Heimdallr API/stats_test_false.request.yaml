@@ -1,0 +1,11 @@
+$kind: http-request
+name: stats_test_false
+url: http://127.0.0.1:3000/api/stats
+method: GET
+headers:
+  Connection: close
+auth:
+  type: noauth
+settings:
+  protocolVersion: http1
+order: 2018678473419178

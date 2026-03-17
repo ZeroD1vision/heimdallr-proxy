@@ -33,4 +33,9 @@ stop-tunnel:
 	@echo "Closing tunnel to $(HOST) port $(PORT)..."
 	@pkill -f "^ssh.*$(L_PORT):127.0.0.1:$(R_PORT)" && echo "✔ Tunnel closed" || echo "[warn] no tunnel found"
 
+db-reset:
+	@rm -f data/heimdallr.db
+	@echo "✔ Database removed"
+
 dev: tunnel run
+stop: stop-tunnel db-reset

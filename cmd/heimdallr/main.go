@@ -6,120 +6,187 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/api"
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/bot"
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/collector"
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/db"
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/xray"
 )
 
 func main() {
-	// Инициализация логов
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	slog.SetDefault(logger)
+	// -------------------------------------------------------------------------
+	// 1. Логирование — JSON для systemd/journald
+	// -------------------------------------------------------------------------
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	slog.Info("heimdallr-proxy starting", "version", "0.3.0")
 
-	// Функция-помощник для красивого вывода в терминал без дублирования в логи
-    printStatus := func(msg string, err error) {
-        if err != nil {
-            fmt.Fprintf(os.Stderr, "✘ %s: %v\n", msg, err)
-            slog.Error(msg, "error", err) // В лог пишем только ошибку
-        } else {
-            fmt.Fprintf(os.Stderr, "✔ %s\n", msg)
-            // Успешные шаги инициализации в логи можно не писать, чтобы не раздувать их
-        }
-    }
+	// -------------------------------------------------------------------------
+	// 2. Конфигурация — весь os.Getenv только здесь
+	// -------------------------------------------------------------------------
+	cfg := loadConfig()
 
-	slog.Info("heimdallr-proxy initialized", "version", "1.0.0")
-	fmt.Println("✔ heimdallr-proxy initialized")
-
-	// 1. Xray Client
-    apiAddr := os.Getenv("XRAY_API_ADDR")
-    if apiAddr == "" {
-        apiAddr = "localhost:10085"
-        slog.Warn("XRAY_API_ADDR not set", "using", apiAddr)
-    }
-    xrayClient := xray.NewClient(apiAddr)
-    printStatus("Xray client initialized", nil)
-
-	tgBot, err := bot.NewBot(xrayClient)
+	// -------------------------------------------------------------------------
+	// 3. База данных
+	// -------------------------------------------------------------------------
+	store, err := db.NewStore(cfg.dbPath)
 	if err != nil {
-		fmt.Printf("✘ Failed to initialize bot: %v\n", err)
+		slog.Error("failed to initialize database", "path", cfg.dbPath, "error", err)
 		os.Exit(1)
 	}
-	printStatus("Telegram bot module loaded", nil)
+	slog.Info("database initialized", "path", cfg.dbPath)
 
-	// Тестовый запрос статистики при запуске
-	slog.Info("Performing initial Xray gRPC connectivity check...")
-
-	// 3. Connectivity Check (логируем только если упало)
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    _, err = xrayClient.GetStats(ctx)
-    cancel()
-    if err != nil {
-        printStatus("Initial connectivity check (Xray might be offline)", err)
-    } else {
-        printStatus("Connection to Xray gRPC API established", nil)
-    }
-
-	maskedID := "*******"
-	adminIDstr := strconv.FormatInt(tgBot.AdminID, 10)
-	if len(adminIDstr) > 3 {
-		maskedID = "*******" + adminIDstr[len(adminIDstr)-3:]
+	// -------------------------------------------------------------------------
+	// 4. Xray gRPC клиент
+	// -------------------------------------------------------------------------
+	xrayClient, initErr := xray.NewClient(cfg.xrayAddr)
+	if initErr != nil {
+		// Не fatal — переподключится при первом вызове
+		slog.Warn("xray initial dial failed, will retry on first request",
+			"addr", cfg.xrayAddr,
+			"error", initErr,
+		)
+	} else {
+		slog.Info("xray client initialized", "addr", cfg.xrayAddr)
 	}
-	slog.Info("Service is running", "admin_id", maskedID)
-	printStatus("Service is running", nil)
 
-	addr := os.Getenv("API_PORT")
-	if addr == "" {
-		slog.Info("API_PORT environment variable is not set, default port 3000")
-		fmt.Println("✘ API_PORT environment variable is not set")
-		defaultPort := "3000"
-		fmt.Printf("Using default port: %s\n", defaultPort)
-		addr = defaultPort
+	// Проверка соединения при старте (информационная, не fatal)
+	checkCtx, checkCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if _, err := xrayClient.GetUserStats(checkCtx, cfg.adminEmail); err != nil {
+		slog.Warn("xray connectivity check failed", "error", err)
+	} else {
+		slog.Info("xray connectivity check passed")
 	}
-	apiServer := api.NewServer(addr, xrayClient)
+	checkCancel()
 
+	// -------------------------------------------------------------------------
+	// 5. Коллектор — фоновый сбор статистики в БД
+	// -------------------------------------------------------------------------
+	// store реализует collector.HistoryStore и collector.UserStore неявно —
+	// у него есть методы SaveHistory и GetAllUsers.
+	// xrayClient реализует collector.StatsClient — есть метод GetUserStats.
+	statsCollector := collector.NewCollector(store, xrayClient, 30*time.Second)
+
+	collectorCtx, collectorCancel := context.WithCancel(context.Background())
+	defer collectorCancel()
+	go statsCollector.Run(collectorCtx)
+
+	// -------------------------------------------------------------------------
+	// 6. API сервер
+	// -------------------------------------------------------------------------
+	// store реализует api.HistoryProvider — есть метод GetHistory.
+	// xrayClient реализует api.StatsProvider — есть метод GetUserStats.
+	apiServer := api.NewServer(cfg.apiPort, cfg.apiKey, cfg.adminEmail, xrayClient, store)
+
+	// -------------------------------------------------------------------------
+	// 7. Telegram бот
+	// -------------------------------------------------------------------------
+	// xrayClient реализует bot.StatsProvider — есть метод GetUserStats.
+	tgBot, err := bot.NewBot(xrayClient, cfg.adminEmail)
+	if err != nil {
+		slog.Error("failed to initialize telegram bot", "error", err)
+		os.Exit(1)
+	}
+
+	// -------------------------------------------------------------------------
+	// 8. Запуск
+	// -------------------------------------------------------------------------
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	// 4. Запуск серверов
-    go func() {
-        if err := apiServer.Start(); err != nil {
-            slog.Error("API server failed", "error", err)
-            os.Exit(1)
-        }
-    }()
-
 	go func() {
-		fmt.Println("✔ Starting Telegram bot...")
-		tgBot.Start()
+		if err := apiServer.Start(); err != nil {
+			slog.Error("api server stopped unexpectedly", "error", err)
+			os.Exit(1)
+		}
 	}()
 
+	go tgBot.Start()
+
+	slog.Info("heimdallr-proxy running",
+		"api_port", cfg.apiPort,
+		"xray_addr", cfg.xrayAddr,
+		"admin_email", cfg.adminEmail,
+		"collect_interval", cfg.collectInterval,
+	)
+	fmt.Println("✔ heimdallr-proxy is running")
+
+	// -------------------------------------------------------------------------
+	// 9. Graceful shutdown — в обратном порядке запуска
+	// -------------------------------------------------------------------------
 	<-stop
+	slog.Info("shutdown signal received")
 
-	printStatus("Shutting down gracefully...", nil)
-	ShutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
 
-	// 1. Останавливаем API сервер
-	if err := apiServer.Shutdown(ShutdownCtx); err != nil {
-		printStatus("API server shutdown error", err)
-	} else {
-		printStatus("API server stopped", nil)
+	collectorCancel() // 1. Коллектор — перестаём писать в БД
+
+	if err := apiServer.Shutdown(shutdownCtx); err != nil { // 2. API
+		slog.Error("api server shutdown error", "error", err)
 	}
 
-	// 2. Останавливаем Telegram бота
-	tgBot.Api.Stop()
-	printStatus("Telegram bot stopped", nil)
+	tgBot.Api.Stop() // 3. Бот
 
-	// 3. ЗАКРЫВАЕМ gRPC соединение
-	if err := xrayClient.Close(); err != nil {
-		printStatus("Failed to close Xray gRPC connection", err)
-	} else {
-		printStatus("Xray gRPC connection closed", nil)
+	if err := xrayClient.Close(); err != nil { // 4. gRPC
+		slog.Error("xray client close error", "error", err)
 	}
 
-	printStatus("Heimdallr-proxy exited", nil)
+	slog.Info("heimdallr-proxy stopped")
+}
+
+type config struct {
+	dbPath     string
+	xrayAddr   string
+	apiPort    string
+	apiKey     string
+	adminEmail string
+	collectInterval time.Duration
+}
+
+func loadConfig() config {
+	cfg := config{
+		dbPath:     getEnv("DB_PATH", "data/heimdallr.db"),
+		xrayAddr:   getEnv("XRAY_API_ADDR", "localhost:10085"),
+		apiPort:    getEnv("API_PORT", "3000"),
+		apiKey:     os.Getenv("API_ADMIN_TOKEN"),
+		adminEmail: getEnv("ADMIN_EMAIL", "zd_pc"),
+		collectInterval: parseDuration("COLLECT_INTERVAL", 30*time.Second),
+	}
+
+	if cfg.apiKey == "" {
+		slog.Error("API_ADMIN_TOKEN is not set")
+		os.Exit(1)
+	}
+
+	return cfg
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	slog.Warn("env not set, using default", "key", key, "default", fallback)
+	return fallback
+}
+ 
+// parseDuration читает интервал из env в формате Go duration ("5s", "1m30s", "2m").
+// Если переменная не задана или невалидна — возвращает fallback.
+func parseDuration(key string, fallback time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		slog.Warn("invalid duration in env, using default",
+			"key", key,
+			"value", v,
+			"default", fallback,
+		)
+		return fallback
+	}
+	return d
 }
