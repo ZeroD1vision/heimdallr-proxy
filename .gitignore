@@ -18,3 +18,8 @@ configs/config.yaml
 # IDE
 .idea/
 .vscode/
+
+# Сборки и временные файлы
+build/
+tmp/
+.next/
