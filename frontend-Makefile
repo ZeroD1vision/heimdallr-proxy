@@ -1,0 +1,23 @@
+# Makefile — frontend targets для интеграции с общим Makefile
+# Копировать нужные targets в корневой Makefile проекта
+
+FRONTEND_DIR := ./frontend   # путь к Next.js проекту
+
+.PHONY: frontend-install frontend-dev frontend-build frontend-clean
+
+## Установить зависимости
+frontend-install:
+	cd $(FRONTEND_DIR) && npm ci
+
+## Запустить dev-сервер локально (hot reload + прокси к Go)
+frontend-dev:
+	cd $(FRONTEND_DIR) && npm run dev
+
+## Собрать статику → out/
+## Go Echo будет раздавать содержимое out/ как статические файлы
+frontend-build:
+	cd $(FRONTEND_DIR) && npm run build
+
+## Удалить артефакты сборки
+frontend-clean:
+	rm -rf $(FRONTEND_DIR)/.next $(FRONTEND_DIR)/out
