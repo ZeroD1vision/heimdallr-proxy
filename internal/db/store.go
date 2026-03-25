@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
