@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,7 +22,26 @@ func main() {
 	// -------------------------------------------------------------------------
 	// 1. Логирование — JSON для systemd/journald
 	// -------------------------------------------------------------------------
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	// Список ключей, которые нельзя выводить в логи
+    sensitiveKeys := map[string]bool{
+        "tg_bot_token":     true,
+        "api_admin_token":  true,
+        "jwt_secret":       true,
+        "password":         true,
+        "token":            true,
+        "code":             true, // для OTP
+    }
+
+    handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+        ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+            // Приводим ключ к нижнему регистру и проверяем
+            if sensitiveKeys[strings.ToLower(a.Key)] {
+                return slog.String(a.Key, "[REDACTED]")
+            }
+            return a
+        },
+    })
+	slog.SetDefault(slog.New(handler))
 	slog.Info("heimdallr-proxy starting", "version", "0.3.0")
 
 	// -------------------------------------------------------------------------
