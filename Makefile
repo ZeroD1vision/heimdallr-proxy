@@ -12,6 +12,13 @@ PORT     = $(SSH_PORT)
 L_PORT   = $(CLIENT_TUNNEL_PORT)
 R_PORT   = $(SERVER_TUNNEL_PORT)
 
+check-prod:
+	@echo "--- [BUILDING STATIC BINARY] ---"
+	@CGO_ENABLED=0 go build -o bin/heimdallr-static ./cmd/heimdallr
+	@echo "--- [STARTING SIMULATION] ---"
+	@# Запускаем бинарник. Все переменные уже экспортированы выше.
+	@./bin/heimdallr-static
+	
 deps:
 	@go mod tidy
 # Сборка под текущую ОС
