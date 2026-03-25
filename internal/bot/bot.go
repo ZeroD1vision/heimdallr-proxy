@@ -36,7 +36,7 @@ func NewBot(sp models.StatsProvider, adminEmail string) (*Bot, error) {
 		Poller: &telebot.LongPoller{Timeout: 10 * time.Second},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Telegram bot: %w", err)
+		return nil, fmt.Errorf("failed to create Telegram bot: (check network/token)")
 	}
 
 	return &Bot{
