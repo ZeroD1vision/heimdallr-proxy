@@ -1,4 +1,17 @@
 {
+  "name": "heimdallr-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "web/ui"
+  ],
+  "scripts": {
+    "prepare": "husky",
+    "ui:dev": "npm run dev -w web/ui",
+    "ui:build": "npm run build -w web/ui",
+    "ui:lint": "npm run lint -w web/ui",
+    "format": "prettier --write ."
+  },
   "devDependencies": {
     "@commitlint/cli": "^20.4.1",
     "@commitlint/config-conventional": "^20.4.1",
@@ -7,7 +20,7 @@
     "prettier": "^3.8.1"
   },
   "lint-staged": {
-    "*.{js,ts,json,md,yml,yaml}": [
+    "*.{js,ts,tsx,json,md,yml,yaml}": [
       "prettier --write"
     ]
   }
