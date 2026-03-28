@@ -106,6 +106,8 @@ func (s *Server) setupRoutes() {
 	g := s.router.Group("/api", s.authMiddleware())
 	g.GET("/stats", s.handleStats)
 	g.GET("/history", s.handleHistory)
+	s.router.Static("/", "web/ui/out")
+    s.router.File("/", "web/ui/out/index.html")
 }
 
 // --- Auth handlers ---

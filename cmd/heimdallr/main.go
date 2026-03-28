@@ -16,6 +16,7 @@ import (
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/collector"
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/db"
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/xray"
+	"github.com/labstack/echo/v4"
 )
 
 func main() {
@@ -127,6 +128,7 @@ func main() {
 		store,
 		tgBot,
 	)
+
 	// -------------------------------------------------------------------------
 	// 8. Запуск
 	// -------------------------------------------------------------------------
@@ -141,6 +143,19 @@ func main() {
 	}()
 
 	go tgBot.Start()
+
+	uiServer := echo.New()
+	uiServer.HideBanner = true
+	uiServer.Static("/", "out")
+	uiServer.File("/", "out/index.html")
+	go func() {
+        addr := fmt.Sprintf(":%s", cfg.uiPort)
+        slog.Info("ui server starting", "addr", addr)
+        if err := uiServer.Start(addr); err != nil {
+            slog.Error("ui server stopped unexpectedly", "error", err)
+            os.Exit(1)
+        }
+    }()
 
 	slog.Info("heimdallr-proxy running",
 		"api_port", cfg.apiPort,
@@ -163,6 +178,10 @@ func main() {
 	
 	tgBot.Api.Stop() // 2. Бот
 
+	if err := uiServer.Shutdown(shutdownCtx); err != nil { // 3. UI
+		slog.Error("ui server shutdown error", "error", err)
+	}
+
 	if err := apiServer.Shutdown(shutdownCtx); err != nil { // 3. API
 		slog.Error("api server shutdown error", "error", err)
 	}
@@ -178,6 +197,7 @@ type config struct {
 	dbPath          string
 	xrayAddr        string
 	apiPort         string
+	uiPort    		string
 	apiKey          string
 	jwtSecret       string
 	adminEmail      string
@@ -196,6 +216,7 @@ func loadConfig() config {
 		dbPath:          getEnv("DB_PATH", "data/heimdallr.db"),
 		xrayAddr:        getEnv("XRAY_API_ADDR", "localhost:10085"),
 		apiPort:         getEnv("API_PORT", "3000"),
+		uiPort:          getEnv("UI_PORT", "3001"),
 		apiKey:          os.Getenv("API_ADMIN_TOKEN"),
 		jwtSecret:       os.Getenv("JWT_SECRET"),
 		adminEmail:      getEnv("ADMIN_EMAIL", "zd_pc"),
