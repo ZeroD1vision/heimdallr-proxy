@@ -1,7 +1,7 @@
 $kind: collection
-name: Heimdallr API
+name: Multi_thread
 auth:
-  - id: 93b072ae-6908-4bab-83b7-10569c1cbde7
+  - id: a2d814e4-6122-42bf-b145-9fbc4476d3e5
     type: bearer
     name: Bearer Token
     credentials:

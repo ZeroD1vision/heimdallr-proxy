@@ -24,6 +24,12 @@ R_PORT   := $(SERVER_TUNNEL_PORT)
 # --- Параметры тестирования (Shadow Deploys) ---
 TEST_BINARY_NAME := heimdallr-test
 TEST_PORT        := 4000
+REMOTE_ENV_PATH  := /var/www/heimdallr/.env
+# 1. Сначала пытаемся взять из .env (уже сделано через include)
+# 2. Если переменная пустая или не задана, устанавливаем фолбек
+ifeq ($(LOCAL_STATIC_DIR),)
+    LOCAL_STATIC_DIR := ./web/ui/out
+endif
 
 # --- Настройки сборки ---
 # Используем CGO_ENABLED=0 для создания переносимого бинарника (Static Binary)
@@ -132,7 +138,7 @@ prod-check: clean ui-build go-build ## Проверка билда в изоля
 	@mkdir -p $(BUILD_DIR)/test_isolation/out
 	@cp $(BUILD_DIR)/$(BINARY_NAME) $(BUILD_DIR)/test_isolation/
 	@cp .env $(BUILD_DIR)/test_isolation/ 2>/dev/null || echo "WARN: .env not found"
-	@cp -r web/ui/out/* $(BUILD_DIR)/test_isolation/out/
+	@cp -r $(LOCAL_STATIC_DIR)/* $(BUILD_DIR)/test_isolation/out/
 	@echo "✔ Binary moved to isolation. Checking go:embed..."
 	# Запуск из папки без доступа к web/ui/out
 	cd $(BUILD_DIR)/test_isolation && export $$(grep -v '^#' .env) && ./$(BINARY_NAME)
@@ -142,16 +148,36 @@ prod-check: clean ui-build go-build ## Проверка билда в изоля
 deploy-test: stop-test build ## Собрать и запустить тестовый бинарник на сервере (порт 4000)
 	@echo "--- [DEPLOY] Sending test binary to /tmp on $(HOST) ---"
 	scp -i $(KEY_PATH) -P $(PORT) $(BUILD_DIR)/$(BINARY_NAME) $(SSH_USER)@$(HOST):/tmp/$(TEST_BINARY_NAME)
+# 	@echo "--- [DEPLOY] Sending test UI folder to /tmp on $(HOST) ---"
+# 	scp -r -i $(KEY_PATH) -P $(PORT) $(LOCAL_STATIC_DIR)/ $(SSH_USER)@$(HOST):/tmp/out
+	@echo "--- [UI] Archiving 110MB and sending (Fast Mode) ---"
+	@# 1. Создаем архив локально (без лишних метаданных для скорости)
+	@tar -czf ui_bundle.tar.gz -C $(LOCAL_STATIC_DIR) .
+
+	@# 2. Перекидываем ОДИН файл (он пойдет на твоем 1MB/s без затыков)
+	scp -i $(KEY_PATH) -P $(PORT) ui_bundle.tar.gz $(SSH_USER)@$(HOST):/tmp/ui_bundle.tar.gz
+	
+	@# 3. Распаковываем на сервере и подметаем мусор
+	ssh -i $(KEY_PATH) -p $(PORT) $(SSH_USER)@$(HOST) \
+		"rm -rf /tmp/out/* && \
+		mkdir -p /tmp/out && \
+		tar -xzf /tmp/ui_bundle.tar.gz -C /tmp/out && \
+		rm /tmp/ui_bundle.tar.gz"
+	
+	@# 4. Удаляем локальный архив
+	@rm ui_bundle.tar.gz
 	@echo "--- [REMOTE] Starting test instance on port $(TEST_PORT) ---"
 	ssh -i $(KEY_PATH) -p $(PORT) $(SSH_USER)@$(HOST) "chmod +x /tmp/$(TEST_BINARY_NAME) && \
-		PORT=$(TEST_PORT) nohup /tmp/$(TEST_BINARY_NAME) > /tmp/$(TEST_BINARY_NAME).log 2>&1 &"
+		cd /tmp && \
+		(export \$$(grep -v '^#' $(REMOTE_ENV_PATH) | xargs) && \
+		(API_PORT=$(TEST_PORT) nohup ./$(TEST_BINARY_NAME) > ./$(TEST_BINARY_NAME).log 2>&1 &) </dev/null) & sleep 1"
 	@echo "✔ Test instance is running. Use 'make tunnel-test' to see UI."
 
 # Прибиваем процесс и вычищаем мусор за собой, чтобы не оставлять на сервере временные файлы 
 # и не создавать конфликтов при повторных запусках
 stop-test: ## Остановить тест на сервере и УДАЛИТЬ все временные файлы (какашки)
 	@echo "--- [REMOTE] Stopping test instance and cleaning up /tmp ---"
-	ssh -i $(KEY_PATH) -p $(PORT) $(SSH_USER)@$(HOST) "pkill -f $(TEST_BINARY_NAME) || true; \
+	ssh -i $(KEY_PATH) -p $(PORT) $(SSH_USER)@$(HOST) "pkill -x $(TEST_BINARY_NAME) || true; \
 		rm -f /tmp/$(TEST_BINARY_NAME) /tmp/$(TEST_BINARY_NAME).log"
 	@echo "✔ Remote /tmp is clean."
 
