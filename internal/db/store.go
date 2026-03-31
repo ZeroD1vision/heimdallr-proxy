@@ -25,12 +25,25 @@ func NewStore(dsn string) (*Store, error) {
 		return nil, fmt.Errorf("create db directory %s: %w", dir, err)
 	}
 
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
+	// Добавляем параметры оптимизации к DSN
+    // WAL позволяет читать и писать одновременно без блокировок
+    optimizedDSN := dsn + "?_journal_mode=WAL&_busy_timeout=5000"
+
+    db, err := gorm.Open(sqlite.Open(optimizedDSN), &gorm.Config{
+        Logger: logger.Default.LogMode(logger.Silent),
+    })
+    if err != nil {
         return nil, fmt.Errorf("failed to connect db: %w", err)
     }
+
+    sqlDB, err := db.DB()
+    if err != nil {
+        return nil, err
+    }
+
+	// Ограничиваем до 1 соединения для записи, так как SQLite — это файл.
+    // Это наш системный семафор на уровне драйвера.
+    sqlDB.SetMaxOpenConns(1)
 
 	// Автомиграция создает таблицы по указанным моделям при запуске
     if err := db.AutoMigrate(
