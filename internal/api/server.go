@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -55,6 +56,7 @@ type Server struct {
 	historyProvider HistoryProvider
 	otpStore        OTPStore
 	notifier        Notifier
+	staticDir       string   // директория со статикой фронтенда
 }
 
 // NewServer принимает готовые зависимости. Никаких os.Getenv внутри пакета.
@@ -65,6 +67,7 @@ func NewServer(
 	historyProvider HistoryProvider,
 	otpStore OTPStore,
 	notifier Notifier,
+	staticDir string,
 ) *Server {
 	e := echo.New()
 	e.HideBanner = true
@@ -83,6 +86,7 @@ func NewServer(
 		historyProvider: historyProvider,
 		otpStore:        otpStore,
 		notifier:        notifier,
+		staticDir:      staticDir,
 	}
 }
 
@@ -106,8 +110,8 @@ func (s *Server) setupRoutes() {
 	g := s.router.Group("/api", s.authMiddleware())
 	g.GET("/stats", s.handleStats)
 	g.GET("/history", s.handleHistory)
-	s.router.Static("/", "web/ui/out")
-    s.router.File("/", "web/ui/out/index.html")
+	s.router.Static("/", s.staticDir)
+	s.router.File("/", filepath.Join(s.staticDir, "index.html"))
 }
 
 // --- Auth handlers ---
