@@ -16,7 +16,6 @@ import (
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/collector"
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/db"
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/xray"
-	"github.com/labstack/echo/v4"
 )
 
 func main() {
@@ -89,20 +88,24 @@ func main() {
 	checkCancel()
 
 	// -------------------------------------------------------------------------
-	// 5. Коллектор — фоновый сбор статистики в БД
+	// 5. Воркеры — Pipeline для асинхронной обработки пользователей
 	// -------------------------------------------------------------------------
-	// store реализует collector.HistoryStore и collector.UserStore неявно —
-	// у него есть методы SaveHistory и GetAllUsers.
-	// xrayClient реализует collector.StatsClient — есть метод GetUserStats.
-	statsCollector := collector.NewCollector(store, xrayClient, 30*time.Second)
+	// Bouncer реализует логику работы с пользователями в Xray (DB + в будущем Xray)
+	bouncer := collector.NewBouncer(store)
+	// Pipeline управляет очередью задач и многопоточным выполнением
+	enforcePipeline := collector.NewPipeline(bouncer, 3) // 3 воркера
+
+	// -------------------------------------------------------------------------
+	// 6. Коллектор — фоновый сбор статистики в БД
+	// -------------------------------------------------------------------------
+	statsCollector := collector.NewCollector(store, xrayClient, enforcePipeline, cfg.collectInterval)
 
 	collectorCtx, collectorCancel := context.WithCancel(context.Background())
 	defer collectorCancel()
-	go statsCollector.Run(collectorCtx)
 
 	
 	// -------------------------------------------------------------------------
-	// 6. Telegram бот
+	// 7. Telegram бот
 	// -------------------------------------------------------------------------
 	// xrayClient реализует bot.StatsProvider — есть метод GetUserStats.
 	tgBot, err := bot.NewBot(xrayClient, cfg.adminEmail)
@@ -112,7 +115,7 @@ func main() {
 	}
 	
 	// -------------------------------------------------------------------------
-	// 7. API сервер
+	// 8. API сервер
 	// -------------------------------------------------------------------------
 	// tgBot реализует api.Notifier (метод SendOTP)
 	// store реализует api.OTPStore и api.HistoryProvider
@@ -127,10 +130,11 @@ func main() {
 		store,
 		store,
 		tgBot,
+		cfg.staticDir,
 	)
 
 	// -------------------------------------------------------------------------
-	// 8. Запуск
+	// 9. Запуск
 	// -------------------------------------------------------------------------
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -142,20 +146,12 @@ func main() {
 		}
 	}()
 
-	go tgBot.Start()
+	// Запуск Pipeline (воркеров блокировки)
+	enforcePipeline.Run(collectorCtx)
 
-	uiServer := echo.New()
-	uiServer.HideBanner = true
-	uiServer.Static("/", "out")
-	uiServer.File("/", "out/index.html")
-	go func() {
-        addr := fmt.Sprintf(":%s", cfg.uiPort)
-        slog.Info("ui server starting", "addr", addr)
-        if err := uiServer.Start(addr); err != nil {
-            slog.Error("ui server stopped unexpectedly", "error", err)
-            os.Exit(1)
-        }
-    }()
+	go statsCollector.Run(collectorCtx)
+
+	go tgBot.Start()
 
 	slog.Info("heimdallr-proxy running",
 		"api_port", cfg.apiPort,
@@ -177,11 +173,7 @@ func main() {
 	collectorCancel() // 1. Коллектор — перестаём писать в БД
 	
 	tgBot.Api.Stop() // 2. Бот
-
-	if err := uiServer.Shutdown(shutdownCtx); err != nil { // 3. UI
-		slog.Error("ui server shutdown error", "error", err)
-	}
-
+	
 	if err := apiServer.Shutdown(shutdownCtx); err != nil { // 3. API
 		slog.Error("api server shutdown error", "error", err)
 	}
@@ -203,6 +195,7 @@ type config struct {
 	adminEmail      string
 	adminTelegramID int64
 	collectInterval time.Duration
+	staticDir 		string
 }
 
 func loadConfig() config {
@@ -222,6 +215,7 @@ func loadConfig() config {
 		adminEmail:      getEnv("ADMIN_EMAIL", "zd_pc"),
 		adminTelegramID: adminTelegramID,
 		collectInterval: parseDuration("COLLECT_INTERVAL", 30*time.Second),
+		staticDir: 		 getEnv("STATIC_DIR", "out"),
 	}
 
 	if cfg.apiKey == "" {
