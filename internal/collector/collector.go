@@ -27,13 +27,19 @@ type XrayClient interface {
 type Collector struct {
 	store    CollectorStore
 	xray     XrayClient
+	pipeline *Pipeline
 	interval time.Duration
 }
 
-func NewCollector(store CollectorStore, xray XrayClient, interval time.Duration) *Collector {
+// NewCollector создаёт экземпляр сборщика.
+// Он принимает pipeline — это наша точка входа в асинхронную обработку.
+// Мы не блокируем основной цикл сбора (tick) тяжелыми операциями блокировки,
+// а просто выкидываем задачу в пайплайн.
+func NewCollector(store CollectorStore, xray XrayClient, pipe *Pipeline, interval time.Duration) *Collector {
 	return &Collector{
 		store: store,
 		xray: xray,
+		pipeline: pipe,
 		interval: interval,
 	}
 }
@@ -58,6 +64,7 @@ func (c *Collector) Run(ctx context.Context) {
 }
 
 // tick — один цикл сбора
+// В том числе делегируем задачи по блокировке пользователей в pipeline
 func (c *Collector) tick(ctx context.Context) {
 	users, err := c.store.GetAllUsers(ctx)
 	if err != nil {
@@ -66,12 +73,23 @@ func (c *Collector) tick(ctx context.Context) {
 	}
 
 	for _, user := range users {
+		// Пропускаем уже заблокированных
+        if user.State == "blocked" {
+            continue
+        }
+
 		stats, err := c.xray.GetUserStats(ctx, user.Email)
 		if err != nil {
 			// Ошибка одного пользователя не останавливает остальных.
 			slog.Error("collector: failed to fetch stats from Xray API", "email", user.Email, "error", err)
 			continue
 		}
+
+		// Лимит: Downlink + Uplink
+        if user.TrafficLimit > 0 && (stats.Downlink + stats.Uplink) > user.TrafficLimit {
+            slog.Warn("limit exceeded, submitting to pipeline", "email", user.Email)
+            c.pipeline.Submit(user)
+        }
 
 		history := &models.UserHistory{
 			Email:     stats.Email,
