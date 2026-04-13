@@ -88,24 +88,7 @@ func main() {
 	checkCancel()
 
 	// -------------------------------------------------------------------------
-	// 5. Воркеры — Pipeline для асинхронной обработки пользователей
-	// -------------------------------------------------------------------------
-	// Bouncer реализует логику работы с пользователями в Xray (DB + в будущем Xray)
-	bouncer := collector.NewBouncer(store)
-	// Pipeline управляет очередью задач и многопоточным выполнением
-	enforcePipeline := collector.NewPipeline(bouncer, 3) // 3 воркера
-
-	// -------------------------------------------------------------------------
-	// 6. Коллектор — фоновый сбор статистики в БД
-	// -------------------------------------------------------------------------
-	statsCollector := collector.NewCollector(store, xrayClient, enforcePipeline, cfg.collectInterval)
-
-	collectorCtx, collectorCancel := context.WithCancel(context.Background())
-	defer collectorCancel()
-
-	
-	// -------------------------------------------------------------------------
-	// 7. Telegram бот
+	// 5. Telegram бот
 	// -------------------------------------------------------------------------
 	// xrayClient реализует bot.StatsProvider — есть метод GetUserStats.
 	tgBot, err := bot.NewBot(xrayClient, cfg.adminEmail)
@@ -114,6 +97,22 @@ func main() {
 		os.Exit(1)
 	}
 	
+	// -------------------------------------------------------------------------
+	// 6. Воркеры — Pipeline для асинхронной обработки пользователей
+	// -------------------------------------------------------------------------
+	// Bouncer реализует логику работы с пользователями в Xray (DB + в будущем Xray)
+	bouncer := collector.NewBouncer(store, xrayClient, tgBot)
+	// Pipeline управляет очередью задач и многопоточным выполнением
+	enforcePipeline := collector.NewPipeline(bouncer, 3) // 3 воркера
+
+	// -------------------------------------------------------------------------
+	// 7. Коллектор — фоновый сбор статистики в БД
+	// -------------------------------------------------------------------------
+	statsCollector := collector.NewCollector(store, xrayClient, enforcePipeline, cfg.collectInterval)
+
+	collectorCtx, collectorCancel := context.WithCancel(context.Background())
+	defer collectorCancel()
+
 	// -------------------------------------------------------------------------
 	// 8. API сервер
 	// -------------------------------------------------------------------------

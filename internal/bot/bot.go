@@ -71,6 +71,15 @@ func (b *Bot) SendOTP(ctx context.Context, telegramID int64, code string) error 
 	return nil
 }
 
+// SendAlert отправляет техническое уведомление администратору.
+func (b *Bot) SendAlert(ctx context.Context, text string) error {
+	recipient := &telebot.User{ID: b.AdminID}
+	if _, err := b.Api.Send(recipient, text); err != nil {
+		return fmt.Errorf("send alert to admin %d: %w", b.AdminID, err)
+	}
+	return nil
+}
+
 func (b *Bot) handleStart(c telebot.Context) error {
 	slog.Info("bot command received", "command", "/start", "user_id", c.Sender().ID)
 	return c.Send("Welcome to Heimdallr Proxy!")
