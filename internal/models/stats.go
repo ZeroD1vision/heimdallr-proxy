@@ -36,18 +36,6 @@ type UserHistory struct {
 	CreatedAt time.Time `json:"created_at"  gorm:"index;not null"`
 }
 
-// User — учётная запись клиента.
-// Центральная модель: связывает email (идентификатор в Xray),
-// Telegram ID (для 2FA и бота) и UUID (для VLESS конфига).
-type User struct {
-	ID           uint   `json:"id"            gorm:"primaryKey"`
-	Email        string `json:"email"         gorm:"uniqueIndex;not null"`
-	TelegramID   int64  `json:"telegram_id"   gorm:"uniqueIndex"`
-	XrayUUID     string `json:"xray_uuid"     gorm:"uniqueIndex;not null"`
-	TrafficLimit int64  `json:"traffic_limit"` // байты, 0 = без лимита
-	State        string `json:"state"         gorm:"default:'active'"` // active | blocked | pending
-}
-
 // OTPCode — одноразовый код для 2FA.
 // TTL контролируется полем ExpiresAt — фоновая чистка удаляет просроченные записи.
 // Один активный код на пользователя — при запросе нового старый перезаписывается.
