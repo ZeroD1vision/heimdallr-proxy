@@ -25,6 +25,24 @@ R_PORT   := $(SERVER_TUNNEL_PORT)
 TEST_BINARY_NAME := heimdallr-test
 TEST_PORT        := 4000
 REMOTE_ENV_PATH  := /var/www/heimdallr/.env
+
+# --- Пути к прото файлам ---
+PROTO_DIR := ./api/proto
+PROTO_OUT := ./internal/xray/proto
+
+# --- Proto toolchain ---
+PROTOC        ?= protoc
+PROTO_SRC_DIR := ./api/proto
+PROTO_GEN_DIR := ./internal/xray/proto
+PROTO_STAMP   := $(PROTO_GEN_DIR)/.stamp
+
+PROTO_FILES := \
+    $(PROTO_SRC_DIR)/app/proxyman/command/command.proto \
+    $(PROTO_SRC_DIR)/app/proxyman/config.proto
+
+PROTO_DEPS := \
+    $(shell find $(PROTO_SRC_DIR) -type f -name '*.proto' 2>/dev/null)
+
 # 1. Сначала пытаемся взять из .env (уже сделано через include)
 # 2. Если переменная пустая или не задана, устанавливаем фолбек
 ifeq ($(LOCAL_STATIC_DIR),)
@@ -43,8 +61,9 @@ GO_BUILD_FLAGS := CGO_ENABLED=0 go build -trimpath -ldflags="-s -w"
 NPM_INSTALL_FLAGS := --ignore-scripts --include=dev
 
 # .PHONY сообщает make, что это команды, а не названия файлов на диске
-.PHONY: help build ui-build ui-install go-build dev dev-ui tunnel stop clean db-reset \
-        prod-check deploy-test stop-test tunnel-test setup
+.PHONY: help build ui-build ui-install go-build go-deps dev dev-ui tunnel stop clean db-reset \
+        prod-check deploy-test stop-test tunnel-test setup \
+		proto proto-check proto-clean proto-verify test-backend test-race
 
 # Команда по умолчанию
 all: build
@@ -82,6 +101,37 @@ dev-ui: ## Запустить dev-сервер фронтенда
 	npm run dev -w web/ui
 
 # ==============================================================================
+# PROTOBUF / GRPC CODEGEN
+# ==============================================================================
+
+proto-check: ## Проверить наличие protoc и go-плагинов
+	@command -v $(PROTOC) >/dev/null || (echo "ERROR: protoc not found"; exit 1)
+	@command -v protoc-gen-go >/dev/null || (echo "ERROR: protoc-gen-go not found"; exit 1)
+	@command -v protoc-gen-go-grpc >/dev/null || (echo "ERROR: protoc-gen-go-grpc not found"; exit 1)
+	@test -d "$(PROTO_SRC_DIR)" || (echo "ERROR: $(PROTO_SRC_DIR) not found"; exit 1)
+
+$(PROTO_STAMP): $(PROTO_DEPS) proto-check
+	@echo "--- [PROTO] Generating Go stubs ---"
+	@mkdir -p $(PROTO_GEN_DIR)
+	@$(PROTOC) -I $(PROTO_SRC_DIR) \
+		--go_out=$(PROTO_GEN_DIR) --go_opt=paths=source_relative \
+		--go-grpc_out=$(PROTO_GEN_DIR) --go-grpc_opt=paths=source_relative \
+		$(PROTO_FILES)
+	@touch $(PROTO_STAMP)
+	@echo "✔ Proto generated"
+
+proto: $(PROTO_STAMP) ## Сгенерировать protobuf/gRPC код
+
+proto-clean: ## Очистить сгенерированные proto-файлы
+	@rm -rf $(PROTO_GEN_DIR)
+	@echo "✔ Proto artifacts removed"
+
+proto-verify: proto ## Проверить, что сгенерированный код закоммичен (для CI)
+	@git diff --quiet -- $(PROTO_GEN_DIR) || \
+		(echo "ERROR: generated proto code is out of date. Run 'make proto' and commit changes."; exit 1)
+	@echo "✔ Proto code is up-to-date"
+
+# ==============================================================================
 # BACKEND (GO)
 # ==============================================================================
 
@@ -92,6 +142,15 @@ go-deps: ## Синхронизировать зависимости Go
 go-build: go-deps ## Собрать только Go бинарник
 	@echo "--- [GO] Building binary ---"
 	$(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(GO_PKG)
+
+test-backend: ## Прогнать backend тесты (без frontend)
+	@echo "--- [TEST] Running backend tests ---"
+	go test ./cmd/... ./internal/...
+
+test-race: ## Прогнать backend тесты с race detector
+	@echo "--- [TEST] Running backend race tests ---"
+	go test -race ./cmd/... ./internal/...
+
 
 # ==============================================================================
 # КОМБИНИРОВАННЫЕ КОМАНДЫ (DEVELOPMENT & PROD)
