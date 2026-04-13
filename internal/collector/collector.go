@@ -74,9 +74,9 @@ func (c *Collector) tick(ctx context.Context) {
 
 	for _, user := range users {
 		// Пропускаем уже заблокированных
-        if user.State == "blocked" {
-            continue
-        }
+		if user.IsBlocked {
+			continue
+		}
 
 		stats, err := c.xray.GetUserStats(ctx, user.Email)
 		if err != nil {
@@ -86,10 +86,10 @@ func (c *Collector) tick(ctx context.Context) {
 		}
 
 		// Лимит: Downlink + Uplink
-        if user.TrafficLimit > 0 && (stats.Downlink + stats.Uplink) > user.TrafficLimit {
-            slog.Warn("limit exceeded, submitting to pipeline", "email", user.Email)
-            c.pipeline.Submit(user)
-        }
+		if user.TrafficLimit > 0 && (stats.Downlink+stats.Uplink) > user.TrafficLimit {
+			slog.Warn("limit exceeded, submitting to pipeline", "email", user.Email)
+			c.pipeline.Submit(user)
+		}
 
 		history := &models.UserHistory{
 			Email:     stats.Email,
