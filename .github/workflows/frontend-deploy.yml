@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: "deploy-heimdallr"
+  cancel-in-progress: true
+
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
   # Job 1: Build Go binary
@@ -24,8 +28,12 @@ jobs:
       - name: "Setup: Initialize Go Environment"
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25.x'
           cache: true
+
+      - name: "Test: Backend Unit Build Check"
+        run: |
+          go test ./cmd/... ./internal/...
 
       - name: "Build: Compile Static Binary"
         # -trimpath удаляет локальные пути разработчика из бинарника, -ldflags="-s -w" убирает отладочную информацию для минимизации размера
@@ -59,12 +67,13 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: "Install: npm Dependencies"
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: "Build: Static Export → out/"
-        # NEXT_PUBLIC_API_URL пустой → same-origin, Go Echo обслуживает и /api/* и /
-        run: |
-          npm run build
+        run: npm run build -w web/ui
+
+      - name: "Check: out directory exists"
+        run: test -d web/ui/out
 
       - name: "Artifact: Upload Static Files"
         uses: actions/upload-artifact@v4
@@ -131,6 +140,8 @@ jobs:
           key:      ${{ secrets.SSH_DEPLOY_USER_KEY }}
           port:     ${{ secrets.SSH_PORT }}
           script: |
+            set -euo pipefail
+            sudo chmod +x /var/www/heimdallr/heimdallr
             sudo systemctl restart heimdallr.service
 
       - name: "Healthcheck: Verify Service Status"
@@ -152,5 +163,5 @@ jobs:
           port:     ${{ secrets.SSH_PORT }}
           script: |
             # Проверяем что / отдаёт 200 (Next.js index.html через Echo)
-            curl -sf http://localhost:${{ secrets.APP_PORT }}/ -o /dev/null || exit 1
+            curl -fsS --retry 10 --retry-delay 2 http://localhost:${{ secrets.API_PORT }}/ -o /dev/null || exit 1
             echo "Frontend serving: OK"
