@@ -1,0 +1,8 @@
+$kind: collection
+name: api/admin/*
+auth:
+  - id: 997960d5-afd8-43c6-8609-227180d4b784
+    type: bearer
+    name: Bearer Token
+    credentials:
+      token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0ZWxlZ3JhbV9pZCI6MTIzNTI5NTE4MSwiZXhwIjoxNzc2MjUzNzUwLCJpYXQiOjE3NzYxNjczNTB9.u_1hFfyZS9sTT6G0I1Jm-0KTn2WHCbjojN3bt2xMwgo

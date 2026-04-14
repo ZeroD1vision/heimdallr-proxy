@@ -1,0 +1,13 @@
+$kind: http-request
+name: admin_delete_user.request
+url: "{{base_url}}:{{port}}/api/admin/users/test-user@heimdallr.local"
+method: DELETE
+auth:
+  credentials:
+    id: 997960d5-afd8-43c6-8609-227180d4b784
+  type: inherit
+scripts:
+  - type: beforeRequest
+    code: pm.test("Status code is 204", () => pm.response.to.have.status(204));
+    language: text/javascript
+order: 1641253151058103

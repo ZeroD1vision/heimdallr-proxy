@@ -1,0 +1,29 @@
+$kind: http-request
+name: admin_create_user.request
+url: "{{base_url}}:{{port}}/api/admin/users"
+method: POST
+body:
+  type: json
+  content: |-
+    {
+        "email": "test-user@heimdallr.local",
+        "telegram_id": 123456789,
+        "traffic_limit": 1073741824,
+        "inbound_tag": "inbound-main",
+        "vless_flow": "xtls-rprx-vision"
+    }
+auth:
+  type: inherit
+  credentials:
+    id: 997960d5-afd8-43c6-8609-227180d4b784
+scripts:
+  - type: beforeRequest
+    code: |-
+      pm.test("Status code is 201", () => pm.response.to.have.status(201));
+      pm.test("User has UUID and Email", () => {
+          const jsonData = pm.response.json();
+          pm.expect(jsonData.email).to.eql("test-user@heimdallr.local");
+          pm.expect(jsonData.uuid).to.be.a('string');
+      });
+    language: text/javascript
+order: 1776166224534
