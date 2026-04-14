@@ -15,7 +15,9 @@ type User struct {
 	ID           uint       `json:"id"             gorm:"primaryKey"`
 	Email        string     `json:"email"          gorm:"uniqueIndex;not null"`
 	TelegramID   int64      `json:"telegram_id"    gorm:"uniqueIndex"`
-	UUID         string     `json:"uuid"           gorm:"uniqueIndex;not null"`
+	// UUID хранится в legacy-совместимой колонке xray_uuid.
+	// Это позволяет обновлять сервис без ручного rename колонки на проде.
+	UUID         string     `json:"uuid"           gorm:"column:xray_uuid;uniqueIndex;not null"`
 	InboundTag   string     `json:"inbound_tag"    gorm:"index;not null;default:'inbound-main'"`
 	Flow         string     `json:"flow"           gorm:"default:''"`
 	VlessFlow    string     `json:"vless_flow"     gorm:"default:''"`
