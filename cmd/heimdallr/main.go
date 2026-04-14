@@ -23,24 +23,24 @@ func main() {
 	// 1. Логирование — JSON для systemd/journald
 	// -------------------------------------------------------------------------
 	// Список ключей, которые нельзя выводить в логи
-    sensitiveKeys := map[string]bool{
-        "tg_bot_token":     true,
-        "api_admin_token":  true,
-        "jwt_secret":       true,
-        "password":         true,
-        "token":            true,
-        "code":             true, // для OTP
-    }
+	sensitiveKeys := map[string]bool{
+		"tg_bot_token":    true,
+		"api_admin_token": true,
+		"jwt_secret":      true,
+		"password":        true,
+		"token":           true,
+		"code":            true, // для OTP
+	}
 
-    handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-        ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-            // Приводим ключ к нижнему регистру и проверяем
-            if sensitiveKeys[strings.ToLower(a.Key)] {
-                return slog.String(a.Key, "[REDACTED]")
-            }
-            return a
-        },
-    })
+	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			// Приводим ключ к нижнему регистру и проверяем
+			if sensitiveKeys[strings.ToLower(a.Key)] {
+				return slog.String(a.Key, "[REDACTED]")
+			}
+			return a
+		},
+	})
 	slog.SetDefault(slog.New(handler))
 	slog.Info("heimdallr-proxy starting", "version", "0.3.0")
 
@@ -58,7 +58,7 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("database initialized", "path", cfg.dbPath)
-	
+
 	// Чистим просроченные OTP при старте — не накапливаем мусор
 	if err := store.DeleteExpiredOTPs(context.Background()); err != nil {
 		slog.Warn("failed to clean expired otps on startup", "error", err)
@@ -96,10 +96,13 @@ func main() {
 		slog.Error("failed to initialize telegram bot", "error", err)
 		os.Exit(1)
 	}
-	
+
 	// -------------------------------------------------------------------------
 	// 6. Воркеры — Pipeline для асинхронной обработки пользователей
 	// -------------------------------------------------------------------------
+	// Presence cache — общий in-memory источник online/offline статусов.
+	presence := collector.NewPresenceCache()
+
 	// Bouncer реализует логику работы с пользователями в Xray (DB + в будущем Xray)
 	bouncer := collector.NewBouncer(store, xrayClient, tgBot)
 	// Pipeline управляет очередью задач и многопоточным выполнением
@@ -108,7 +111,7 @@ func main() {
 	// -------------------------------------------------------------------------
 	// 7. Коллектор — фоновый сбор статистики в БД
 	// -------------------------------------------------------------------------
-	statsCollector := collector.NewCollector(store, xrayClient, enforcePipeline, cfg.collectInterval)
+	statsCollector := collector.NewCollector(store, xrayClient, presence, enforcePipeline, cfg.collectInterval)
 
 	collectorCtx, collectorCancel := context.WithCancel(context.Background())
 	defer collectorCancel()
@@ -127,6 +130,9 @@ func main() {
 		cfg.adminTelegramID,
 		xrayClient,
 		store,
+		store,
+		xrayClient,
+		presence,
 		store,
 		tgBot,
 		cfg.staticDir,
@@ -170,9 +176,9 @@ func main() {
 	defer shutdownCancel()
 
 	collectorCancel() // 1. Коллектор — перестаём писать в БД
-	
+
 	tgBot.Api.Stop() // 2. Бот
-	
+
 	if err := apiServer.Shutdown(shutdownCtx); err != nil { // 3. API
 		slog.Error("api server shutdown error", "error", err)
 	}
@@ -188,21 +194,21 @@ type config struct {
 	dbPath          string
 	xrayAddr        string
 	apiPort         string
-	uiPort    		string
+	uiPort          string
 	apiKey          string
 	jwtSecret       string
 	adminEmail      string
 	adminTelegramID int64
 	collectInterval time.Duration
-	staticDir 		string
+	staticDir       string
 }
 
 func loadConfig() config {
 	adminIDStr := getEnv("TG_ADMIN_ID", "0")
 	adminTelegramID, err := strconv.ParseInt(adminIDStr, 10, 64)
 	if err != nil {
-	    slog.Warn("invalid TG_ADMIN_ID, using 0", "value", adminIDStr)
-	    adminTelegramID = 0
+		slog.Warn("invalid TG_ADMIN_ID, using 0", "value", adminIDStr)
+		adminTelegramID = 0
 	}
 	cfg := config{
 		dbPath:          getEnv("DB_PATH", "data/heimdallr.db"),
@@ -214,7 +220,7 @@ func loadConfig() config {
 		adminEmail:      getEnv("ADMIN_EMAIL", "zd_pc"),
 		adminTelegramID: adminTelegramID,
 		collectInterval: parseDuration("COLLECT_INTERVAL", 30*time.Second),
-		staticDir: 		 getEnv("STATIC_DIR", "out"),
+		staticDir:       getEnv("STATIC_DIR", "out"),
 	}
 
 	if cfg.apiKey == "" {
@@ -237,7 +243,7 @@ func getEnv(key, fallback string) string {
 	slog.Warn("env not set, using default", "key", key, "default", fallback)
 	return fallback
 }
- 
+
 // parseDuration читает интервал из env в формате Go duration ("5s", "1m30s", "2m").
 // Если переменная не задана или невалидна — возвращает fallback.
 func parseDuration(key string, fallback time.Duration) time.Duration {
