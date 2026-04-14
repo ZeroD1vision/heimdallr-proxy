@@ -1,0 +1,17 @@
+$kind: http-request
+name: admin_list_users.request
+url: "{{base_url}}:{{port}}/api/admin/users"
+method: GET
+auth:
+  credentials:
+    id: 997960d5-afd8-43c6-8609-227180d4b784
+  type: inherit
+scripts:
+  - type: beforeRequest
+    code: |-
+      pm.test("Status code is 200", () => pm.response.to.have.status(200));
+      pm.test("User is blocked", () => {
+          pm.expect(pm.response.json().is_blocked).to.be.true;
+      });
+    language: text/javascript
+order: 1629509878722545

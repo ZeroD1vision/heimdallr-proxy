@@ -1,6 +1,6 @@
 $kind: http-request
 name: 2fa_test
-url: http://localhost:3000/api/auth/request-otp
+url: "{{base_url}}:{{port}}/api/auth/request-otp"
 method: POST
 headers:
   Connection: close

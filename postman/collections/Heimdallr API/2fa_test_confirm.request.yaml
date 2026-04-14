@@ -1,6 +1,6 @@
 $kind: http-request
 name: 2fa_test_confirm
-url: http://localhost:3000/api/auth/verify-otp
+url: "{{base_url}}:{{port}}/api/auth/verify-otp"
 method: POST
 headers:
   Connection: close
@@ -9,7 +9,7 @@ body:
   content: |-
     {
         "telegram_id": 1235295181,
-        "code": "2333" 
+        "code": "093814" 
     }
 auth:
   credentials:
