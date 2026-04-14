@@ -24,9 +24,16 @@ type XrayClient interface {
 	GetUserStats(ctx context.Context, email string) (models.UserStats, error)
 }
 
+// PresenceStore — минимальный контракт кэша online/offline статусов.
+// Коллектор пишет в этот кэш после каждой попытки опроса Xray.
+type PresenceStore interface {
+	Set(email string, online bool)
+}
+
 type Collector struct {
 	store    CollectorStore
 	xray     XrayClient
+	presence PresenceStore
 	pipeline *Pipeline
 	interval time.Duration
 }
@@ -35,10 +42,11 @@ type Collector struct {
 // Он принимает pipeline — это наша точка входа в асинхронную обработку.
 // Мы не блокируем основной цикл сбора (tick) тяжелыми операциями блокировки,
 // а просто выкидываем задачу в пайплайн.
-func NewCollector(store CollectorStore, xray XrayClient, pipe *Pipeline, interval time.Duration) *Collector {
+func NewCollector(store CollectorStore, xray XrayClient, presence PresenceStore, pipe *Pipeline, interval time.Duration) *Collector {
 	return &Collector{
-		store: store,
-		xray: xray,
+		store:    store,
+		xray:     xray,
+		presence: presence,
 		pipeline: pipe,
 		interval: interval,
 	}
@@ -80,9 +88,15 @@ func (c *Collector) tick(ctx context.Context) {
 
 		stats, err := c.xray.GetUserStats(ctx, user.Email)
 		if err != nil {
+			if c.presence != nil {
+				c.presence.Set(user.Email, false)
+			}
 			// Ошибка одного пользователя не останавливает остальных.
 			slog.Error("collector: failed to fetch stats from Xray API", "email", user.Email, "error", err)
 			continue
+		}
+		if c.presence != nil {
+			c.presence.Set(user.Email, true)
 		}
 
 		// Лимит: Downlink + Uplink
@@ -97,7 +111,7 @@ func (c *Collector) tick(ctx context.Context) {
 			Uplink:    stats.Uplink,
 			CreatedAt: time.Now().UTC(),
 		}
- 
+
 		if err := c.store.SaveHistory(ctx, history); err != nil {
 			slog.Error("collector: failed to save history", "email", user.Email, "error", err)
 		}
