@@ -108,9 +108,16 @@ func (c *Client) AddUser(ctx context.Context, user models.User) error {
 		return fmt.Errorf("inbound tag must not be empty")
 	}
 
+	// Поддерживаем оба поля модели: приоритет у VlessFlow,
+	// fallback на Flow для обратной совместимости payload.
+	flow := user.VlessFlow
+	if flow == "" {
+		flow = user.Flow
+	}
+
 	account := &vless.Account{
 		Id:         user.UUID,
-		Flow:       user.VlessFlow,
+		Flow:       flow,
 		Encryption: "none",
 	}
 
