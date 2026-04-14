@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"time"
 
+	dbstore "github.com/ZeroD1vision/heimdallr-proxy/internal/db"
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
@@ -43,8 +45,29 @@ type Notifier interface {
 	SendOTP(ctx context.Context, telegramID int64, code string) error
 }
 
-// --- Структура сервера ---
+// UserStore — операции с пользователями в БД для admin API.
+type UserStore interface {
+	CreateUser(ctx context.Context, user *models.User) error
+	DeleteUser(ctx context.Context, email string) error
+	GetAllUsers(ctx context.Context) ([]models.User, error)
+	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
+	UpdateStatus(ctx context.Context, email string, isBlocked bool, expiresAt *time.Time) error
+	ResetTraffic(ctx context.Context, email string) error
+}
 
+// XrayUserManager — контракт управления пользователями в Xray.
+type XrayUserManager interface {
+	AddUser(ctx context.Context, user models.User) error
+	RemoveUser(ctx context.Context, inboundTag, email string) error
+}
+
+// PresenceProvider — read-only доступ к online/offline кэшу.
+// API использует этот интерфейс для обогащения списка пользователей.
+type PresenceProvider interface {
+	IsOnline(email string) bool
+}
+
+// --- Структура сервера ---
 type Server struct {
 	router          *echo.Echo
 	port            string
@@ -54,6 +77,9 @@ type Server struct {
 	adminTelegramID int64
 	statsProvider   StatsProvider
 	historyProvider HistoryProvider
+	userStore       UserStore
+	xrayUsers       XrayUserManager
+	presence        PresenceProvider
 	otpStore        OTPStore
 	notifier        Notifier
 	staticDir       string   // директория со статикой фронтенда
@@ -65,6 +91,9 @@ func NewServer(
 	adminTelegramID int64,
 	statsProvider StatsProvider,
 	historyProvider HistoryProvider,
+	userStore UserStore,
+	xrayUsers XrayUserManager,
+	presence PresenceProvider,
 	otpStore OTPStore,
 	notifier Notifier,
 	staticDir string,
@@ -84,9 +113,12 @@ func NewServer(
 		adminTelegramID: adminTelegramID,
 		statsProvider:   statsProvider,
 		historyProvider: historyProvider,
+		userStore:       userStore,
+		xrayUsers:       xrayUsers,
+		presence:        presence,
 		otpStore:        otpStore,
 		notifier:        notifier,
-		staticDir:      staticDir,
+		staticDir:       staticDir,
 	}
 }
 
@@ -106,6 +138,14 @@ func (s *Server) setupRoutes() {
 	auth := s.router.Group("/api/auth")
 	auth.POST("/request-otp", s.handleRequestOTP)
 	auth.POST("/verify-otp", s.handleVerifyOTP)
+
+	admin := s.router.Group("/api/admin", s.authMiddleware())
+	admin.POST("/users", s.handleAdminCreateUser)
+	admin.DELETE("/users/:email", s.handleAdminDeleteUser)
+	admin.GET("/users", s.handleAdminListUsers)
+	admin.PATCH("/users/:email/block", s.handleAdminBlockUser)
+	admin.PATCH("/users/:email/unblock", s.handleAdminUnblockUser)
+	admin.POST("/users/:email/reset-traffic", s.handleAdminResetTraffic)
 
 	g := s.router.Group("/api", s.authMiddleware())
 	g.GET("/stats", s.handleStats)
@@ -207,6 +247,35 @@ func (s *Server) handleVerifyOTP(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"token": token})
 }
 
+type createUserInput struct {
+	Email        string     `json:"email"`
+	TelegramID   int64      `json:"telegram_id"`
+	InboundTag   string     `json:"inbound_tag"`
+	VlessFlow    string     `json:"vless_flow"`
+	TrafficLimit int64      `json:"traffic_limit"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+}
+
+func (input *createUserInput) validate() error {
+    if input.Email == "" {
+        return fmt.Errorf("email is required")
+    }
+    if input.TelegramID <= 0 {
+        return fmt.Errorf("telegram_id must be > 0")
+    }
+    if input.TrafficLimit < 0 {
+        return fmt.Errorf("traffic_limit must be >= 0")
+    }
+    if input.InboundTag == "" {
+        input.InboundTag = "inbound-main"
+    }
+    return nil
+}
+
+func isNotFoundError(err error) bool {
+	return errors.Is(err, dbstore.ErrNotFound)
+}
+
 // --- Middleware ---
  
 // authMiddleware принимает два типа токенов:
@@ -296,6 +365,8 @@ func (s *Server) validateJWT(tokenStr string) error {
 	return nil
 }
 
+// --- API handlers ---
+
 // GET /api/stats — статистика в текущий момент
 func (s *Server) handleStats(c echo.Context) error {
 	stats, err := s.statsProvider.GetUserStats(c.Request().Context(), s.adminEmail)
@@ -326,6 +397,188 @@ func (s *Server) handleHistory(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, history)
 }
+
+// --- Users handlers ---
+
+// Структура списка пользователей и статусом (Online/Offline)
+type adminUserView struct {
+	models.User
+	Status string `json:"status"` // blocked | online | offline
+}
+
+// POST /api/admin/users — создание нового пользователя
+func (s *Server) handleAdminCreateUser(c echo.Context) error {
+	var input createUserInput
+	if err := c.Bind(&input); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	}
+	if err := input.validate(); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	user := models.User{
+		Email:        input.Email,
+		TelegramID:   input.TelegramID,
+		InboundTag:   input.InboundTag,
+		VlessFlow:    input.VlessFlow,
+		TrafficLimit: input.TrafficLimit,
+		ExpiresAt:    input.ExpiresAt,
+        IsBlocked:    false,
+	}
+
+	ctx := c.Request().Context()
+	if err := s.userStore.CreateUser(ctx, &user); err != nil {
+		slog.Error("admin create user: db error", "email", user.Email, "error", err)
+		return c.JSON(http.StatusConflict, map[string]string{"error": "failed to create user in db"})
+	}
+
+	if err := s.xrayUsers.AddUser(ctx, user); err != nil {
+		// Откатываем создание в БД при ошибке Xray API
+		_ = s.userStore.DeleteUser(ctx, user.Email)
+		slog.Error("admin create user: xray error, rollback done", "email", user.Email, "error", err)
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "failed to add user to xray"})
+	}
+
+	return c.JSON(http.StatusCreated, user)
+}
+
+// DELETE /api/admin/users/:email — удаление пользователя
+func (s *Server) handleAdminDeleteUser(c echo.Context) error {
+	email := c.Param("email")
+	if email == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "email is required"})
+	}
+
+	ctx := c.Request().Context()
+	user, err := s.userStore.GetUserByEmail(ctx, email)
+	if err != nil {
+		if isNotFoundError(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "user not found"})
+		}
+		slog.Error("admin delete user: fetch failed", "email", email, "error", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db fetch failed"})
+	}
+
+	if err := s.userStore.DeleteUser(ctx, email); err != nil {
+		if isNotFoundError(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "user not found"})
+		}
+		slog.Error("admin delete user: db delete failed", "email", email, "error", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db delete failed"})
+	}
+
+	if err := s.xrayUsers.RemoveUser(ctx, user.InboundTag, user.Email); err != nil {
+		if user.IsBlocked {
+			// Если пользователь уже заблокирован, значит его нет в Xray — игнорируем ошибку удаления.
+			slog.Warn("admin delete user: xray remove failed but user is already blocked, ignoring", "email", email, "error", err)
+			return c.NoContent(http.StatusNoContent)
+		}
+		// Ошибка удаления из Xray для активного пользователя — критическая, нужно логировать и компенсировать.
+		_ = s.userStore.CreateUser(ctx, user) // компенсация
+		slog.Error("admin delete user: xray error, rollback done", "email", email, "error", err)
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "xray remove user failed"})
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// GET /api/admin/users — список всех пользователей
+func (s *Server) handleAdminListUsers(c echo.Context) error {
+	users, err := s.userStore.GetAllUsers(c.Request().Context())
+	if err != nil {
+		slog.Error("admin list users: fetch failed", "error", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to fetch users"})
+	}
+
+	out := make([]adminUserView, 0, len(users))
+	for _, u := range users {
+		status := "offline"
+		if u.IsBlocked {
+			status = "blocked"
+		} else if s.presence != nil && s.presence.IsOnline(u.Email) {
+			status = "online"
+		}
+		out = append(out, adminUserView{User: u, Status: status})
+	}
+
+	return c.JSON(http.StatusOK, out)
+}
+
+// PATCH /api/admin/users/:email/block — принудительная блокировка пользователя.
+func (s *Server) handleAdminBlockUser(c echo.Context) error {
+	email := c.Param("email")
+	if email == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "email is required"})
+	}
+
+	ctx := c.Request().Context()
+	user, err := s.userStore.GetUserByEmail(ctx, email)
+	if err != nil {
+		if isNotFoundError(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "user not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db fetch failed"})
+	}
+
+	if err := s.xrayUsers.RemoveUser(ctx, user.InboundTag, user.Email); err != nil {
+		slog.Error("admin block user: xray remove failed", "email", user.Email, "error", err)
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "xray remove user failed"})
+	}
+
+	if err := s.userStore.UpdateStatus(ctx, user.Email, true, user.ExpiresAt); err != nil {
+		_ = s.xrayUsers.AddUser(ctx, *user) // компенсация
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db status update failed"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "blocked"})
+}
+
+// PATCH /api/admin/users/:email/unblock — разблокировка и возврат в Xray inbound.
+func (s *Server) handleAdminUnblockUser(c echo.Context) error {
+	email := c.Param("email")
+	if email == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "email is required"})
+	}
+
+	ctx := c.Request().Context()
+	user, err := s.userStore.GetUserByEmail(ctx, email)
+	if err != nil {
+		if isNotFoundError(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "user not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db fetch failed"})
+	}
+
+	if err := s.xrayUsers.AddUser(ctx, *user); err != nil {
+		slog.Error("admin unblock user: xray add failed", "email", user.Email, "error", err)
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "xray add user failed"})
+	}
+
+	if err := s.userStore.UpdateStatus(ctx, user.Email, false, nil); err != nil {
+		_ = s.xrayUsers.RemoveUser(ctx, user.InboundTag, user.Email) // компенсация
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db status update failed"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "active"})
+}
+
+// POST /api/admin/users/:email/reset-traffic — сброс лимита трафика пользователя.
+func (s *Server) handleAdminResetTraffic(c echo.Context) error {
+	email := c.Param("email")
+	if email == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "email is required"})
+	}
+
+	if err := s.userStore.ResetTraffic(c.Request().Context(), email); err != nil {
+		if isNotFoundError(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "user not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to reset traffic"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "traffic_reset"})
+}
+
 
 // --- Helpers ---
  
