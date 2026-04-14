@@ -1,5 +1,9 @@
 $kind: http-request
 name: multi_thread
-url: ""
+url: http://127.0.0.1:3000/api/stats
 method: GET
+auth:
+  type: inherit
+  credentials:
+    id: a2d814e4-6122-42bf-b145-9fbc4476d3e5
 order: 1774952471754
