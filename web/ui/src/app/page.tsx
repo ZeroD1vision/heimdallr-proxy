@@ -17,6 +17,8 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react'
+import Link from 'next/link';
+import { motion } from 'framer-motion';
 
 // ── Конфиг кадров ─────────────────────────────────────────────────────────────
 const HERO_FRAMES       = 121
@@ -357,13 +359,7 @@ export default function LandingPage() {
         particles(ctx,W,H,0.44,p); horizLine(ctx,W,H,1.1,ts)
       }
     }
-
-    // Виньет поверх всего
-    // const vg=ctx.createRadialGradient(W/2,H/2,H*0.18,W/2,H/2,H*0.82)
-    // vg.addColorStop(0,'transparent')
-    // vg.addColorStop(1,'rgba(0,0,10,0.82)')
-    // ctx.fillStyle=vg; ctx.fillRect(0,0,W,H)
-
+    
     // Горизонтальный градиент сверху/снизу
     const tg=ctx.createLinearGradient(0,0,0,H)
     tg.addColorStop(0,'rgba(0,0,10,0.55)')
@@ -465,24 +461,6 @@ export default function LandingPage() {
           position:'absolute',inset:0,zIndex:10,pointerEvents:'none',
           opacity:1,willChange:'opacity',
         }}>
-          <nav style={{position:'absolute',top:0,left:0,right:0,padding:'22px 32px',
-            display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <div style={{display:'flex',alignItems:'center',gap:10,
-              pointerEvents:'auto',cursor:'pointer'}}>
-              <span style={{width:6,height:6,borderRadius:'50%',display:'inline-block',
-                background:'#33ff00',animation:'dotPulse 2.8s ease-in-out infinite',
-                boxShadow:'0 0 8px #2fff00'}}/>
-              <span style={{fontFamily:'var(--font-geist-mono,monospace)',fontSize:11,
-                letterSpacing:'.38em',color:'rgba(255, 255, 255, 0.53)',textTransform:'uppercase'}}>
-                Heimdallr
-              </span>
-            </div>
-            <a href="/dashboard" style={{fontFamily:'var(--font-geist-mono,monospace)',
-              fontSize:11,letterSpacing:'.2em',color:'rgba(255, 255, 255, 0.51)',
-              textDecoration:'none',textTransform:'uppercase',pointerEvents:'auto'}}>
-              Access Portal ↗
-            </a>
-          </nav>
 
           <div style={{position:'absolute',top:'50%',left:'50%',
             transform:'translate(-50%,-50%)',
