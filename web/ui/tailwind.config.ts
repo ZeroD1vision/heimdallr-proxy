@@ -11,6 +11,8 @@ const config: Config = {
       fontFamily: {
         display: ['var(--font-syne)', 'sans-serif'],
         mono: ['var(--font-geist-mono)', 'monospace'],
+        jost: ["Jost", "sans-serif"],
+        jakarta: ["Plus Jakarta Sans", "sans-serif"],
       },
       colors: {
         void:    '#000000',
