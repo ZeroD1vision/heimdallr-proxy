@@ -1,5 +1,10 @@
 /* globals.css — Heimdallr unified design system */
 
+/* Tailwind @layer base tokens */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 *,*::before,*::after { margin:0; padding:0; box-sizing:border-box }
 
 :root {
@@ -10,15 +15,50 @@
   --glass:   rgba(255,255,255,0.03);
   --border:  rgba(255,255,255,0.08);
   --muted:   rgba(255,255,255,0.35);
+  --oled-black: #000000;
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-bg: rgba(255, 255, 255, 0.02);
+  --chromatic-red: rgba(255, 0, 0, 0.5);
+  --chromatic-blue: rgba(0, 255, 255, 0.5);
+}
+
+.glass-card {
+  @apply rounded-2xl border border-white/10;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+  isolation: isolate;
+  transform: translateZ(0); 
+}
+
+@layer base {
+  .font-syne {
+    font-family: var(--font-syne), sans-serif;
+    /* Улучшаем отрисовку тонких и жирных линий */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  
+  .font-mono {
+    font-family: var(--font-geist-mono), monospace;
+  }
 }
 
 html { background: var(--void); color-scheme: dark; scroll-behavior: auto }
 body { background: var(--void); color: #fff; overflow-x: hidden; -webkit-font-smoothing: antialiased }
 
-::-webkit-scrollbar       { width: 3px }
 ::-webkit-scrollbar-track { background: transparent }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px }
 ::selection { background: rgba(0,255,136,.15) }
+::-webkit-scrollbar {
+  display: none;
+}
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 /* Video layer base class */
 .vl {
@@ -30,11 +70,6 @@ body { background: var(--void); color: #fff; overflow-x: hidden; -webkit-font-sm
   pointer-events: none;
   z-index: 1;
 }
-
-/* Tailwind @layer base tokens */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 /* ── Animations ── */
 @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
@@ -78,5 +113,18 @@ body { background: var(--void); color: #fff; overflow-x: hidden; -webkit-font-sm
     opacity: 0.8;
     transform: translateY(5px) scale(1.2);
     stroke-opacity: 0.7;
+  }
+}
+
+@layer utilities {
+  .font-syne-fixed {
+    font-family: var(--font-syne), sans-serif !important;
+    text-transform: uppercase;
+    -webkit-font-smoothing: antialiased;
+  }
+  
+  .font-mono-fixed {
+    font-family: var(--font-geist-mono), monospace !important;
+    text-transform: uppercase;
   }
 }
