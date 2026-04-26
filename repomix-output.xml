@@ -1,0 +1,4224 @@
+This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching these patterns are excluded: out, assets, public, .next, node_modules, *.png, *.jpg, .env, package.json, package-lock.json, *.md, bin, .husky
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.github/
+  ISSUE_TEMPLATE/
+    bug_report.md
+  workflows/
+    deploy.yml
+    frontend-deploy.yml
+    test-deploy.yml
+  CONTRIBUTING.md
+  PULL_REQUEST_TEMPLATE.md
+.postman/
+  resources.yaml
+cmd/
+  heimdallr/
+    main.go
+internal/
+  api/
+    server.go
+  bot/
+    bot.go
+  collector/
+    bouncer.go
+    collector.go
+    pipeline.go
+    presence.go
+  db/
+    history.go
+    otp.go
+    store.go
+    user.go
+  models/
+    stats.go
+    user.go
+  xray/
+    stats.go
+postman/
+  collections/
+    api-admin-/
+      .resources/
+        definition.yaml
+      admin_block_user.request.request.yaml
+      admin_create_user.request.request.yaml
+      admin_delete_user.request.request.yaml
+      admin_list_users.request.request.yaml
+      admin_reset_traffic.request.request.yaml
+    Heimdallr API/
+      .resources/
+        definition.yaml
+      2fa_test_confirm.request.yaml
+      2fa_test.request.yaml
+      stats_test_false.request.yaml
+      stats_test_history_false.request.yaml
+      stats_test_history.request.yaml
+      stats_test_true.request.yaml
+    Multi_thread/
+      .resources/
+        definition.yaml
+      multi_thread.request.yaml
+  environments/
+    Heimdallr-Dev.environment.yaml
+  globals/
+    workspace.globals.yaml
+web/
+  dashboard/
+    page.tsx
+  ui/
+    public/
+      assets/
+        frames/
+          data/
+            frame_0001.jpg
+            ...
+        videos/
+          1080/
+            data_section_animation_1080.mp4
+            hero_data_transition_1080.mp4
+            hero_section_animation_1080.mp4
+          data_section_animation_720.mp4
+          hero_data_transition_720.mp4
+          hero_section_animation.mp4
+      fonts/
+        geist-mono-v4-latin-regular.woff2
+        syne-v24-latin-800.woff2
+        syne-v24-latin-regular.woff2
+    src/
+      app/
+        globals.css
+        layout.tsx
+        page.tsx
+    next-env.d.ts
+    next.config.ts
+    package.json
+    postcss.config.js
+    tailwind.config.ts
+    tsconfig.json
+.commitlintrc.yaml
+.env.example
+.gitignore
+.prettierrc.yaml
+frontend-Makefile
+go.mod
+Makefile
+multi_thread_test.sh
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".github/workflows/test-deploy.yml">
+name: Manual Test Deploy
+
+on:
+  workflow_dispatch: # Позволяет запускать вручную кнопкой
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest # Самые быстрые и доступные машины
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build Test Binary
+        run: |
+          # Собираем простейший бинарник "hello world" под Linux
+          echo 'package main; import "fmt"; func main() { fmt.Println("Heimdallr Test: Binary is working on Ubuntu 20.04!") }' > test.go
+          GOOS=linux GOARCH=amd64 go build -o heimdallr-test test.go
+
+      - name: Copy to Server via SCP
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_DEPLOY_USER_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: "heimdallr-test"
+          target: "~/" # Кидаем в домашнюю папку юзера
+
+      - name: Execute Test on Server via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_DEPLOY_USER_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            chmod +x ~/heimdallr-test
+            ~/heimdallr-test # Запускаем и смотрим вывод в консоль гита
+            rm ~/heimdallr-test # Удаляем за собой
+</file>
+
+<file path=".postman/resources.yaml">
+# Use this workspace to collaborate
+workspace:
+  id: e5b5c039-5328-4b13-8c6f-9664dd9437a9
+
+# All resources in the `postman/` folder are automatically registered in Local View.
+# Point to additional files outside the `postman/` folder to register them individually. Example:
+#localResources:
+#  collections:
+#    - ../tests/E2E Test Collection/
+</file>
+
+<file path="internal/collector/pipeline.go">
+package collector
+
+import (
+	"context"
+	"log/slog"
+
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
+)
+
+type Enforcer interface {
+	BlockUser(ctx context.Context, user models.User) error
+}
+
+type Pipeline struct {
+	tasks    chan models.User
+	enforcer Enforcer
+	workers  int
+}
+
+func NewPipeline(enforcer Enforcer, workers int) *Pipeline {
+	return &Pipeline{
+		tasks:    make(chan models.User, 100),
+		enforcer: enforcer,
+		workers:  workers,
+	}
+}
+
+func (p *Pipeline) Run(ctx context.Context) {
+	for i := 0; i < p.workers; i++ {
+		go p.worker(ctx, i)
+	}
+}
+
+func (p *Pipeline) worker(ctx context.Context, id int) {
+	slog.Debug("enforcer worker started", "worker_id", id)
+	for {
+		select {
+		case user := <-p.tasks:
+			slog.Info("processing enforcement task", "email", user.Email, "worker_id", id)
+			if err := p.enforcer.BlockUser(ctx, user); err != nil {
+				slog.Error("enforcement failed", "email", user.Email, "error", err)
+			}
+		case <-ctx.Done():
+			slog.Debug("worker stopping", "worker_id", id)
+			return
+		}
+	}
+}
+
+func (p *Pipeline) Submit(user models.User) {
+	select {
+	case p.tasks <- user:
+	default:
+		slog.Error("enforcement pipeline overflow, task dropped", "email", user.Email)
+    }
+}
+</file>
+
+<file path="internal/collector/presence.go">
+package collector
+
+import "sync"
+
+type PresenceCache struct {
+	mu    sync.RWMutex
+	state map[string]bool
+}
+
+func NewPresenceCache() *PresenceCache {
+	return &PresenceCache{state: make(map[string]bool)}
+}
+
+func (p *PresenceCache) Set(email string, online bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.state[email] = online
+}
+
+func (p *PresenceCache) IsOnline(email string) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.state[email]
+}
+</file>
+
+<file path="internal/db/history.go">
+package db
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
+)
+
+func (s *Store) SaveHistory(ctx context.Context, history *models.UserHistory) error {
+	err := s.db.WithContext(ctx).Create(history).Error
+	if err != nil {
+		return fmt.Errorf("save history for %s: %w", history.Email, err)
+	}
+	return nil
+}
+
+func (s *Store) GetHistory(ctx context.Context, email string, limit int) ([]models.UserHistory, error) {
+	var histories []models.UserHistory
+	err := s.db.WithContext(ctx).
+		Where("email = ?", email).
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&histories).Error
+	if err != nil {
+		return nil, fmt.Errorf("get history for %s: %w", email, err)
+	}
+	return histories, nil
+}
+
+func (s *Store) GetHistorySince(ctx context.Context, email string, since time.Time) ([]models.UserHistory, error) {
+	var histories []models.UserHistory
+	err := s.db.WithContext(ctx).
+		Where("email = ? AND created_at >= ?", email, since).
+		Order("created_at DESC").
+		Find(&histories).Error
+	if err != nil {
+		return nil, fmt.Errorf("get history since %s for %s: %w", since.Format(time.RFC3339), email, err)
+	}
+	return histories, nil
+}
+</file>
+
+<file path="internal/db/otp.go">
+package db
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+// SaveOTP сохраняет OTP код для пользователя.
+// Используем Upsert (ON CONFLICT UPDATE) — один активный код на пользователя.
+// Если код уже был — перезаписываем. Так не копятся "мёртвые" коды в таблице.
+func (s *Store) SaveOTP(ctx context.Context, otp *models.OTPCode) error {
+	result := s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{{ Name: "admin_id" }},
+			DoUpdates: clause.AssignmentColumns([]string{"code", "expires_at", "used"}),
+		}).
+		Create(otp)
+	if result.Error != nil {
+		return fmt.Errorf("save otp for admin_id %d: %w", otp.AdminID, result.Error)
+	}
+	return nil
+}
+ 
+// FindValidOTP ищет неиспользованный непросроченный код для пользователя.
+// Возвращает db.ErrNotFound если код не найден, истёк или уже использован.
+func (s *Store) FindValidOTP(ctx context.Context, adminID int64, code string) (*models.OTPCode, error) {
+	var otp models.OTPCode
+	result := s.db.WithContext(ctx).
+		Where("admin_id = ? AND code = ? AND expires_at > ? AND used = false", adminID, code, time.Now().UTC()).
+		First(&otp)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+
+	if result.Error != nil {
+		return nil, fmt.Errorf("find otp for admin_id %d: %w", adminID, result.Error)
+	}
+	return &otp, nil
+}
+
+
+// MarkOTPUsed помечает код как использованный.
+// Вызывается сразу после успешной верификации — код нельзя использовать повторно.
+func (s *Store) MarkOTPUsed(ctx context.Context, id uint) error {
+	result := s.db.WithContext(ctx).
+		Model(&models.OTPCode{}).
+		Where("id = ?", id).
+		Update("used", true)
+	if result.Error != nil {
+		return fmt.Errorf("mark otp %d as used: %w", id, result.Error)
+	}
+	return nil
+}
+ 
+// DeleteExpiredOTPs удаляет все просроченные и использованные коды.
+// Вызывать при старте и периодически — чтобы таблица не росла бесконечно.
+func (s *Store) DeleteExpiredOTPs(ctx context.Context) error {
+	result := s.db.WithContext(ctx).
+		Where("expires_at < ? OR used = true", time.Now().UTC()).
+		Delete(&models.OTPCode{})
+	if result.Error != nil {
+		return fmt.Errorf("delete expired otps: %w", result.Error)
+	}
+	return nil
+}
+</file>
+
+<file path="postman/collections/api-admin-/.resources/definition.yaml">
+$kind: collection
+name: api/admin/*
+auth:
+  - id: 997960d5-afd8-43c6-8609-227180d4b784
+    type: bearer
+    name: Bearer Token
+    credentials:
+      token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0ZWxlZ3JhbV9pZCI6MTIzNTI5NTE4MSwiZXhwIjoxNzc2MjUzNzUwLCJpYXQiOjE3NzYxNjczNTB9.u_1hFfyZS9sTT6G0I1Jm-0KTn2WHCbjojN3bt2xMwgo
+</file>
+
+<file path="postman/collections/api-admin-/admin_block_user.request.request.yaml">
+$kind: http-request
+name: admin_block_user.request
+url: "{{base_url}}:{{port}}/api/admin/users/test-user@heimdallr.local/block"
+method: PATCH
+auth:
+  credentials:
+    id: 997960d5-afd8-43c6-8609-227180d4b784
+  type: inherit
+scripts:
+  - type: beforeRequest
+    code: |-
+      pm.test("Status code is 200", () => pm.response.to.have.status(200));
+      pm.test("User is blocked", () => {
+          pm.expect(pm.response.json().is_blocked).to.be.true;
+      });
+    language: text/javascript
+order: 1602095300718805
+</file>
+
+<file path="postman/collections/api-admin-/admin_create_user.request.request.yaml">
+$kind: http-request
+name: admin_create_user.request
+url: "{{base_url}}:{{port}}/api/admin/users"
+method: POST
+body:
+  type: json
+  content: |-
+    {
+        "email": "test-user@heimdallr.local",
+        "telegram_id": 123456789,
+        "traffic_limit": 1073741824,
+        "inbound_tag": "inbound-main",
+        "vless_flow": "xtls-rprx-vision"
+    }
+auth:
+  type: inherit
+  credentials:
+    id: 997960d5-afd8-43c6-8609-227180d4b784
+scripts:
+  - type: beforeRequest
+    code: |-
+      pm.test("Status code is 201", () => pm.response.to.have.status(201));
+      pm.test("User has UUID and Email", () => {
+          const jsonData = pm.response.json();
+          pm.expect(jsonData.email).to.eql("test-user@heimdallr.local");
+          pm.expect(jsonData.uuid).to.be.a('string');
+      });
+    language: text/javascript
+order: 1776166224534
+</file>
+
+<file path="postman/collections/api-admin-/admin_delete_user.request.request.yaml">
+$kind: http-request
+name: admin_delete_user.request
+url: "{{base_url}}:{{port}}/api/admin/users/test-user@heimdallr.local"
+method: DELETE
+auth:
+  credentials:
+    id: 997960d5-afd8-43c6-8609-227180d4b784
+  type: inherit
+scripts:
+  - type: beforeRequest
+    code: pm.test("Status code is 204", () => pm.response.to.have.status(204));
+    language: text/javascript
+order: 1641253151058103
+</file>
+
+<file path="postman/collections/api-admin-/admin_list_users.request.request.yaml">
+$kind: http-request
+name: admin_list_users.request
+url: "{{base_url}}:{{port}}/api/admin/users"
+method: GET
+auth:
+  credentials:
+    id: 997960d5-afd8-43c6-8609-227180d4b784
+  type: inherit
+scripts:
+  - type: beforeRequest
+    code: |-
+      pm.test("Status code is 200", () => pm.response.to.have.status(200));
+      pm.test("User is blocked", () => {
+          pm.expect(pm.response.json().is_blocked).to.be.true;
+      });
+    language: text/javascript
+order: 1629509878722545
+</file>
+
+<file path="postman/collections/api-admin-/admin_reset_traffic.request.request.yaml">
+$kind: http-request
+name: admin_reset_traffic.request
+url: "{{base_url}}:{{port}}/api/admin/users/test-user@heimdallr.local/reset-traffic"
+method: POST
+auth:
+  credentials:
+    id: 997960d5-afd8-43c6-8609-227180d4b784
+  type: inherit
+scripts:
+  - type: beforeRequest
+    code: >-
+      pm.test("Status code is 200", () => pm.response.to.have.status(200));
+
+      // Проверяем, что в базе теперь 0 (нужно дернуть GetUser потом для
+      точности)
+    language: text/javascript
+order: 14341746775552
+</file>
+
+<file path="postman/collections/Heimdallr API/stats_test_false.request.yaml">
+$kind: http-request
+name: stats_test_false
+url: http://127.0.0.1:3000/api/stats
+method: GET
+headers:
+  Connection: close
+auth:
+  type: noauth
+settings:
+  protocolVersion: http1
+order: 2018678473419178
+</file>
+
+<file path="postman/collections/Heimdallr API/stats_test_history_false.request.yaml">
+$kind: http-request
+name: stats_test_history_false
+url: http://127.0.0.1:3000/api/history?limit=9999
+method: GET
+headers:
+  Connection: close
+queryParams:
+  limit: "9999"
+auth:
+  credentials:
+    id: 93b072ae-6908-4bab-83b7-10569c1cbde7
+  type: inherit
+settings:
+  protocolVersion: http1
+order: 4291587901846426
+</file>
+
+<file path="postman/collections/Heimdallr API/stats_test_history.request.yaml">
+$kind: http-request
+name: stats_test_history
+url: http://127.0.0.1:3000/api/history?limit=10
+method: GET
+headers:
+  Connection: close
+queryParams:
+  limit: "10"
+auth:
+  type: inherit
+  credentials:
+    id: 93b072ae-6908-4bab-83b7-10569c1cbde7
+settings:
+  protocolVersion: http1
+order: 2277186337599720
+</file>
+
+<file path="postman/collections/Heimdallr API/stats_test_true.request.yaml">
+$kind: http-request
+name: stats_test_true
+url: http://127.0.0.1:3000/api/stats
+method: GET
+headers:
+  - key: Connection
+    value: close
+auth:
+  credentials:
+    - key: id
+      value: 93b072ae-6908-4bab-83b7-10569c1cbde7
+  type: inherit
+settings:
+  protocolVersion: http1
+order: 1773569055303
+</file>
+
+<file path="postman/collections/Multi_thread/.resources/definition.yaml">
+$kind: collection
+name: Multi_thread
+auth:
+  - id: a2d814e4-6122-42bf-b145-9fbc4476d3e5
+    type: bearer
+    name: Bearer Token
+    credentials:
+      token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0ZWxlZ3JhbV9pZCI6MTIzNTI5NTE4MSwiZXhwIjoxNzc1MDM4MDE5LCJpYXQiOjE3NzQ5NTE2MTl9.U7tfG-wOlRoRVWtYgEV41ihqcaii8vnCpjCXVyVu3-U
+</file>
+
+<file path="postman/globals/workspace.globals.yaml">
+name: Globals
+values: []
+</file>
+
+<file path="web/dashboard/page.tsx">
+'use client'
+// app/page.tsx
+// Точка входа. Управляет состоянием аутентификации и видео-секциями.
+// Всё выше auth gate — только видео и минимальный UI.
+
+import { useCallback, useEffect, useState } from 'react'
+import { tokenStore } from '@/lib/api'
+import { useVideoBackground } from '@/hooks/useVideoBackground'
+import VideoBackground from '@/components/VideoBackground'
+import AuthGate from '@/components/AuthGate'
+import Dashboard from '@/components/Dashboard'
+
+export default function Home() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [hydrated,        setHydrated]        = useState(false)
+
+  const { videoRef, currentSection, setSection, progress } = useVideoBackground('hero')
+
+  // Избегаем hydration mismatch: localStorage недоступен на сервере
+  useEffect(() => {
+    setHydrated(true)
+    const token = tokenStore.get()
+    if (token) {
+      setIsAuthenticated(true)
+      setSection('data')
+    }
+  }, [setSection])
+
+  const handleAuthenticated = useCallback(() => {
+    setIsAuthenticated(true)
+    setSection('transition')
+    // После transition → data
+    setTimeout(() => setSection('data'), 8_000)
+  }, [setSection])
+
+  const handleLogout = useCallback(() => {
+    setIsAuthenticated(false)
+    setSection('hero')
+  }, [setSection])
+
+  // До hydration — пустой экран (нет flash несовпадения разметки)
+  if (!hydrated) {
+    return (
+      <>
+        <VideoBackground ref={videoRef} section={currentSection} />
+        <div className="flex min-h-screen items-center justify-center">
+          <span
+            className="h-1.5 w-1.5 rounded-full animate-pulse-slow"
+            style={{ background: '#00ff88', boxShadow: '0 0 8px #00ff88' }}
+          />
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <VideoBackground ref={videoRef} section={currentSection} />
+
+      {isAuthenticated ? (
+        <Dashboard
+          setSection={setSection}
+          onLogout={handleLogout}
+          videoProgress={progress}
+          currentSection={currentSection}
+        />
+      ) : (
+        <AuthGate onAuthenticated={handleAuthenticated} />
+      )}
+    </>
+  )
+}
+</file>
+
+<file path="web/ui/src/app/globals.css">
+/* globals.css — Heimdallr unified design system */
+
+*,*::before,*::after { margin:0; padding:0; box-sizing:border-box }
+
+:root {
+  --accent:  #00ff88;
+  --danger:  #ff3b5c;
+  --blue:    #38bdf8;
+  --void:    #000000;
+  --glass:   rgba(255,255,255,0.03);
+  --border:  rgba(255,255,255,0.08);
+  --muted:   rgba(255,255,255,0.35);
+}
+
+html { background: var(--void); color-scheme: dark; scroll-behavior: auto }
+body { background: var(--void); color: #fff; overflow-x: hidden; -webkit-font-smoothing: antialiased }
+
+::-webkit-scrollbar       { width: 3px }
+::-webkit-scrollbar-track { background: transparent }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px }
+::selection { background: rgba(0,255,136,.15) }
+
+/* Video layer base class */
+.vl {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  will-change: opacity;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Tailwind @layer base tokens */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Animations ── */
+@keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+@keyframes slideUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+@keyframes scan    { from{transform:translateY(-100%)} to{transform:translateY(400%)} }
+@keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+@keyframes dotPulse {
+  0%,100% { opacity:1; box-shadow:0 0 7px var(--accent) }
+  50%     { opacity:.5; box-shadow:0 0 18px var(--accent), 0 0 36px rgba(0,255,136,.2) }
+}
+@keyframes scrollLine {
+  0%   { transform:scaleY(0); transform-origin:top; opacity:0 }
+  50%  { transform:scaleY(1); transform-origin:top; opacity:1 }
+  100% { transform:scaleY(0); transform-origin:bottom; opacity:0 }
+}
+
+/* Utility: glass panel */
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 8px;
+}
+
+@keyframes chevronPulse {
+  0%   { opacity: 0;    transform: translateY(-4px) }
+  30%  { opacity: 0.55; transform: translateY(0px)  }
+  60%  { opacity: 0.2;  transform: translateY(3px)  }
+  100% { opacity: 0;    transform: translateY(6px)  }
+}
+
+@keyframes chevronFloat {
+  0%,100% {
+    opacity: 0.2;
+    transform: translateY(0px) scale(1);
+    stroke-opacity: 0.3;
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(5px) scale(1.2);
+    stroke-opacity: 0.7;
+  }
+}
+</file>
+
+<file path="web/ui/src/app/page.tsx">
+'use client'
+/**
+ * app/page.tsx — Frame-sequence landing page
+ *
+ * Вместо video scrubbing используем PNG/JPG кадры загруженные в Image() объекты.
+ * ctx.drawImage() на уже декодированный битмап = 0ms задержки, идеальная плавность.
+ *
+ * АРХИТЕКТУРА:
+ *   - hero:       121 кадр, зацикленный автоплей ~25fps через rAF
+ *   - transition: 192 кадра, индекс = Math.round(scrollProgress × 191)
+ *   - data:       192 кадра, зацикленный автоплей ~25fps через rAF
+ *
+ * ЗАГРУЗКА:
+ *   Все кадры грузятся параллельно на mount через Promise.all.
+ *   Пока грузятся — canvas показывает анимированную заглушку.
+ *   Когда загрузились — переключаемся на кадры.
+ */
+
+import { useEffect, useRef, useCallback, useState } from 'react'
+
+// ── Конфиг кадров ─────────────────────────────────────────────────────────────
+const HERO_FRAMES       = 121
+const TRANSITION_FRAMES = 192
+const DATA_FRAMES       = 192
+
+const framePath = (section: 'hero'|'transition'|'data', n: number) =>
+  `/assets/frames/${section}/frame_${String(n).padStart(4,'0')}.jpg`
+
+// ── Scroll зоны ───────────────────────────────────────────────────────────────
+const HERO_VH  = 2.5
+const TRANS_VH = 6.0
+const DATA_VH  = 2.5
+
+// ── Scroll анимация ───────────────────────────────────────────────────────────
+const SNAP_THRESHOLD   = 0.28   // t > этого → автоснап вперёд
+const RETURN_THRESHOLD = 0.18   // t < этого → автовозврат назад
+const SNAP_DURATION    = 2200   // ms автодотяжки вперёд
+const RETURN_DURATION  = 1400   // ms возврата назад (быстрее)
+
+// ── Инерция ───────────────────────────────────────────────────────────────────
+const INERTIA_DECAY = 0.2   // 0.88 = плавно, 0.92 = дольше плывёт
+
+interface Particle {
+  x:number; y:number; sz:number; vy:number; vx:number; hue:number; bright:number
+}
+
+const FEATURES = [
+  {n:'01',t:'DPI Shield',    d:'VLESS+Reality+gRPC — трафик неотличим от HTTPS/2 потоков'},
+  {n:'02',t:'Bifrost Bot',   d:'Полный контроль ноды через Telegram — ключи, статусы, live stats'},
+  {n:'03',t:'Gjallarhorn',   d:'Real-time дашборд с 30s коллектором и историческими графиками'},
+  {n:'04',t:'Zero Weight',   d:'8 МБ Go бинарь · SQLite · работает в 768 МБ RAM'},
+  {n:'05',t:'Yggdrasil API', d:'Echo REST · gRPC к Xray-core · async goroutine collector'},
+  {n:'06',t:'Armored 2FA',   d:'OTP через Telegram → JWT — timing-safe, brute-force resistant'},
+]
+
+export default function LandingPage() {
+  const rootRef   = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const heroUIRef = useRef<HTMLDivElement>(null)
+  const dataUIRef = useRef<HTMLDivElement>(null)
+
+  // Загруженные кадры
+  const heroFrames  = useRef<HTMLImageElement[]>([])
+  const transFrames = useRef<HTMLImageElement[]>([])
+  const dataFrames  = useRef<HTMLImageElement[]>([])
+  const framesReady = useRef(false)
+
+  // Прогресс загрузки для индикатора
+  const [loadProgress, setLoadProgress] = useState(0)
+  const [loaded, setLoaded] = useState(false)
+
+  // Scroll / phase state
+  const phase   = useRef<'hero'|'transition'|'data'>('hero')
+  const transP  = useRef(0)   // 0..1 прогресс transition
+  const heroP   = useRef(0)   // текущий кадр hero (float для плавного инкремента)
+  const dataP   = useRef(0)   // текущий кадр data
+  const hintRef = useRef<HTMLDivElement>(null)
+  const chevronRefs = useRef<(SVGSVGElement|null)[]>([null, null, null])
+
+  // Инерция
+  const velocity     = useRef(0)
+  const lastScrollY  = useRef(0)
+  const inertiaRaf   = useRef(0)
+  const scrollDir = useRef<'down'|'up'>('down')
+
+  const pendY   = useRef(0)
+  const rafPend = useRef(false)
+  const lastT   = useRef(0)
+  const pts     = useRef<Particle[]>([])
+  const geo     = useRef({W:0,H:0,heroHold:0,transLen:0})
+
+  // ── Setup ──────────────────────────────────────────────────────────────────
+  const setup = useCallback(()=>{
+    const W=window.innerWidth, H=window.innerHeight
+    const heroHold=H*HERO_VH, transLen=H*TRANS_VH
+    geo.current={W,H,heroHold,transLen}
+    if(rootRef.current) rootRef.current.style.height=(heroHold+transLen+H*DATA_VH)+'px'
+    const c=canvasRef.current
+    if(c){c.width=W;c.height=H}
+    const p:Particle[]=[]
+    for(let i=0;i<280;i++) p.push({
+      x:Math.random()*W, y:Math.random()*H,
+      sz:Math.random()*1.6+0.2,
+      vy:-(Math.random()*.024+.006),
+      vx:(Math.random()-.5)*.007,
+      hue:Math.random()*55+15,
+      bright:Math.random()*.55+.4,
+    })
+    pts.current=p
+  },[])
+
+  // ── Загрузка кадров ────────────────────────────────────────────────────────
+  const loadFrames = useCallback(async ()=>{
+    const total = HERO_FRAMES + TRANSITION_FRAMES + DATA_FRAMES
+    let done = 0
+
+    const load = (src:string):Promise<HTMLImageElement> =>
+      new Promise(res=>{
+        const img = new Image()
+        img.onload  = ()=>{ done++; setLoadProgress(Math.round(done/total*100)); res(img) }
+        img.onerror = ()=>{ done++; res(img) }  // пропускаем битые кадры
+        img.src = src
+      })
+
+    // Загружаем параллельно батчами по 20 чтобы не вешать сеть
+    const batch = async (srcs:string[]):Promise<HTMLImageElement[]>=>{
+      const results:HTMLImageElement[]=[]
+      for(let i=0;i<srcs.length;i+=20){
+        const chunk = srcs.slice(i,i+20)
+        results.push(...await Promise.all(chunk.map(load)))
+      }
+      return results
+    }
+
+    const [h,t,d] = await Promise.all([
+      batch(Array.from({length:HERO_FRAMES},      (_,i)=>framePath('hero',i+1))),
+      batch(Array.from({length:TRANSITION_FRAMES}, (_,i)=>framePath('transition',i+1))),
+      batch(Array.from({length:DATA_FRAMES},       (_,i)=>framePath('data',i+1))),
+    ])
+
+    heroFrames.current  = h
+    transFrames.current = t
+    dataFrames.current  = d
+    framesReady.current = true
+    setLoaded(true)
+  },[])
+
+  const snapActive = useRef(false)
+
+  // ── Auto Snap ───────────────────────────────────────────────────────────
+  const autoSnap = useCallback((heroHold: number, transLen: number) => {
+    if (snapActive.current) return   // уже тянем, не запускаем повторно
+    snapActive.current = true
+    cancelAnimationFrame(inertiaRaf.current)  // убиваем инерцию перед snap
+
+    const target = heroHold + transLen   // конечная позиция = начало data секции
+    const duration = 3000                  // ms на дотяжку
+
+    const start    = window.scrollY
+    const startTime = performance.now()
+
+    const ease = (t: number) => t < 0.5
+      ? 2*t*t
+      : -1+(4-2*t)*t   // ease-in-out quad
+
+    const tick = () => {
+      const elapsed = performance.now() - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      const eased    = ease(progress)
+
+      window.scrollTo(0, start + (target - start) * eased)
+
+      if (progress < 1) {
+        if (scrollDir.current === 'up') {
+          snapActive.current = false
+          return
+        }
+        requestAnimationFrame(tick)
+      } else {
+        snapActive.current = false
+      }
+    }
+
+    requestAnimationFrame(tick)
+  }, [])
+
+  const updateHint = (t: number) => {
+    const el = hintRef.current
+    if (!el) return
+    const rise = t < 0.72 ? t / 0.72 : 1
+    const fly  = t > 0.72 ? (t - 0.72) / 0.28 : 0
+
+    if (t <= 0) {
+      // Idle — на месте
+      chevronRefs.current.forEach(r => {
+        if (!r) return
+        r.style.animationDuration = '2s'
+        r.style.transform = 'translateY(0)'
+        r.style.opacity = '1'
+        r.querySelector('polyline')?.setAttribute('stroke','rgb(255, 255, 255)')
+      })
+      const span = el.querySelector('span')
+      if (span) {
+        span.style.letterSpacing = '.44em'
+        span.style.opacity = '1'
+      }
+      el.style.transform = 'translateX(-50%) translateY(0px)'
+      el.style.opacity = '1'
+      el.style.letterSpacing = '.44em'
+      el.style.scale = '1'
+
+    } else if (t < 0.72) {
+      // Tension — тянется вверх пропорционально прогрессу
+      chevronRefs.current.forEach((r, i) => {
+        if (!r) return
+        // Ускоряем анимацию и увеличиваем яркость пропорционально
+        const speed = 1 - rise * 0.6   // от 1s до 0.4s
+        const bright = 0.3 + rise * 0.5
+        r.style.animationDuration = `${speed}s`
+        r.querySelector('polyline')?.setAttribute(
+          'stroke', `rgba(255,255,255,${bright})`
+        )
+        // Смещаем вниз пропорционально индексу — эффект растяжения
+        // Раздвигаем в стороны + вниз — эффект расхождения
+        const side = (i - 1) * rise * 12   // левый летит влево, правый вправо, средний на месте
+        r.style.transform = `translateX(${side}px) translateY(${rise * (i+1) * 4}px) scaleX(${1 + rise * 0.3})`
+        r.style.opacity = String(0.3 + rise * 0.6)
+      })
+      const yUp  = rise * 350  // px вверх от низа
+      const sc   = 1 + rise * 0.30  // лёгкое растяжение
+      const op   = 1 - rise * 0.2   // чуть тускнеет
+
+      el.style.transform = `translateX(-50%) translateY(-${yUp}px)`
+      el.style.opacity   = String(op)
+      el.style.scale     = `${sc}`
+      const span = el.querySelector('span')
+      if (span) {
+        span.style.letterSpacing = `${0.44 + rise * 1.2}em`
+        span.style.opacity = String(1 + rise * 0.6)
+      }
+
+    } else {
+      // Release — улетает вверх и исчезает
+      chevronRefs.current.forEach(r => {
+        if (!r) return
+        r.style.opacity = String(Math.max(0, 1 - fly * 3))
+      })
+      const yUp = 350 + fly * 300
+      const op  = Math.max(0, 0.7 - fly * 1.4)
+
+      el.style.transform = `translateX(-50%) translateY(-${yUp}px)`
+      el.style.opacity   = String(op)
+    }
+  }
+  // ── Apply scroll ───────────────────────────────────────────────────────────
+  const applyScroll = useCallback((y:number)=>{
+    const {H,heroHold,transLen}=geo.current
+    let hA=1, dA=0
+
+    if (scrollDir.current === 'up') {
+      snapActive.current = false
+    }
+    if(y < heroHold){
+      phase.current='hero'
+      transP.current=0
+      updateHint(0)
+      const fs=heroHold*.85
+      hA=y<fs?1:1-(y-fs)/(heroHold*.15); dA=0
+
+    } else if(y < heroHold+transLen){
+      const t=(y-heroHold)/transLen
+      // Автодотяжка: после точки разрыва (t > 0.72) берём управление на себя
+      if (t > 0.42 && t < 1.0 && scrollDir.current === 'down') {
+        autoSnap(heroHold, transLen)
+      }
+      phase.current='transition'
+      transP.current=t
+      updateHint(t)
+      hA=0; dA=t>.75?(t-.75)/.25:0
+
+    } else {
+      phase.current='data'
+      transP.current=1
+      hA=0; dA=1
+    }
+
+    const hu=heroUIRef.current, du=dataUIRef.current
+    if(hu) hu.style.opacity=String(Math.max(0,Math.min(1,hA)))
+    if(du) du.style.opacity=String(Math.max(0,Math.min(1,dA)))
+  },[])
+
+  // ── Инерция ────────────────────────────────────────────────────────────────
+  const runInertia = useCallback(()=>{
+    if(Math.abs(velocity.current) < 0.8) return
+    velocity.current *= INERTIA_DECAY
+    window.scrollBy(0, velocity.current)
+    inertiaRaf.current = requestAnimationFrame(runInertia)
+  },[])
+
+  // ── Render loop ────────────────────────────────────────────────────────────
+  const render = useCallback((ts:number)=>{
+    const dt=Math.min(50,ts-lastT.current); lastT.current=ts
+    const c=canvasRef.current
+    if(!c){requestAnimationFrame(render);return}
+    const ctx=c.getContext('2d')
+    if(!ctx){requestAnimationFrame(render);return}
+    const {W,H}=geo.current, p=pts.current
+
+    // Advance particles
+    for(const pt of p){
+      pt.x+=pt.vx*dt; pt.y+=pt.vy*dt
+      if(pt.y<-4){pt.y=H+4;pt.x=Math.random()*W}
+      if(pt.x<0) pt.x=W
+      if(pt.x>W) pt.x=0
+    }
+
+    ctx.clearRect(0,0,W,H)
+    ctx.fillStyle='#00000a'; ctx.fillRect(0,0,W,H)
+
+    const ph=phase.current, tp=transP.current
+
+    if(framesReady.current){
+      // ── FRAME MODE ──────────────────────────────────────────────────────
+      if(ph==='hero'){
+        // Зацикленный hero: инкремент ~25fps
+        heroP.current += dt * 0.025
+        const idx = Math.floor(heroP.current % HERO_FRAMES)
+        const img = heroFrames.current[idx]
+        if(img?.complete) ctx.drawImage(img,0,0,W,H)
+
+      } else if(ph==='transition'){
+        // Скраб по scroll position
+        const idx = Math.min(
+          Math.round(tp * (TRANSITION_FRAMES-1)),
+          TRANSITION_FRAMES-1
+        )
+        const img = transFrames.current[idx]
+        if(img?.complete) ctx.drawImage(img,0,0,W,H)
+
+        // Ambient particles поверх
+        particles(ctx,W,H,0.25,p)
+
+      } else {
+        // Зацикленный data
+        dataP.current += dt * 0.025
+        const idx = Math.floor(dataP.current % DATA_FRAMES)
+        const img = dataFrames.current[idx]
+        if(img?.complete) ctx.drawImage(img,0,0,W,H)
+      }
+
+    } else {
+      // ── FALLBACK: canvas заглушка пока кадры грузятся ──────────────────
+      if(ph==='hero' || (ph==='transition' && tp<0.5)){
+        chromatic(ctx,W,H,1,ts); particles(ctx,W,H,1,p); horizLine(ctx,W,H,1,ts)
+      } else {
+        grid(ctx,W,H,1,ts); chromatic(ctx,W,H,0.38,ts)
+        particles(ctx,W,H,0.44,p); horizLine(ctx,W,H,1.1,ts)
+      }
+    }
+
+    // Виньет поверх всего
+    // const vg=ctx.createRadialGradient(W/2,H/2,H*0.18,W/2,H/2,H*0.82)
+    // vg.addColorStop(0,'transparent')
+    // vg.addColorStop(1,'rgba(0,0,10,0.82)')
+    // ctx.fillStyle=vg; ctx.fillRect(0,0,W,H)
+
+    // Горизонтальный градиент сверху/снизу
+    const tg=ctx.createLinearGradient(0,0,0,H)
+    tg.addColorStop(0,'rgba(0,0,10,0.55)')
+    tg.addColorStop(0.12,'transparent')
+    tg.addColorStop(0.88,'transparent')
+    tg.addColorStop(1,'rgba(0,0,10,0.65)')
+    ctx.fillStyle=tg; ctx.fillRect(0,0,W,H)
+
+    requestAnimationFrame(render)
+  },[])
+
+  // ── Mount ──────────────────────────────────────────────────────────────────
+  useEffect(()=>{
+    setup()
+    applyScroll(window.scrollY)
+    requestAnimationFrame(render)
+    loadFrames()
+
+    const onScroll=()=>{
+      // Инерция
+      const currentY = window.scrollY
+      const diff = currentY - lastScrollY.current
+      velocity.current = diff
+      scrollDir.current = diff > 0 ? 'down' : diff < 0 ? 'up' : scrollDir.current
+      lastScrollY.current = currentY
+
+      pendY.current=window.scrollY
+      if(!rafPend.current){
+        rafPend.current=true
+        requestAnimationFrame(()=>{rafPend.current=false;applyScroll(pendY.current)})
+      }
+    }
+
+    const onScrollEnd=()=>{
+      cancelAnimationFrame(inertiaRaf.current)
+      runInertia()
+    }
+    const onWheel = (e: WheelEvent) => {
+      if (snapActive.current) e.preventDefault()
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      if (snapActive.current) e.preventDefault()
+    }
+    window.addEventListener('scroll',onScroll,{passive:true})
+    window.addEventListener('scrollend',onScrollEnd,{passive:true})
+    window.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    window.addEventListener('resize',setup)
+    return()=>{
+      window.removeEventListener('scroll',onScroll)
+      window.removeEventListener('scrollend',onScrollEnd)
+      window.removeEventListener('resize',setup)
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('touchmove', onTouchMove)
+      cancelAnimationFrame(inertiaRaf.current)
+    }
+  },[setup,applyScroll,render,loadFrames,runInertia])
+
+  return (
+    <div ref={rootRef} style={{position:'relative'}}>
+      <div style={{position:'sticky',top:0,height:'100dvh',overflow:'hidden',width:'100%'}}>
+
+        {/* Canvas — единственный визуальный слой */}
+        <canvas ref={canvasRef} style={{
+          position:'absolute',inset:0,width:'100%',height:'100%',
+          pointerEvents:'none',zIndex:0,
+        }}/>
+
+        {/* Загрузчик — виден пока кадры не готовы */}
+        {!loaded && (
+          <div style={{
+            position:'absolute',inset:0,zIndex:30,
+            display:'flex',flexDirection:'column',
+            alignItems:'center',justifyContent:'center',gap:16,
+            pointerEvents:'none',
+          }}>
+            <div style={{
+              width:180,height:1,
+              background:'rgba(255,255,255,0.08)',
+              borderRadius:1,overflow:'hidden',
+            }}>
+              <div style={{
+                height:'100%',
+                width:loadProgress+'%',
+                background:'linear-gradient(90deg,rgba(0,255,136,.4),#00ff88)',
+                transition:'width 0.1s linear',
+              }}/>
+            </div>
+            <span style={{
+              fontFamily:'var(--font-geist-mono,monospace)',
+              fontSize:9,letterSpacing:'.38em',
+              color:'rgba(255,255,255,.2)',textTransform:'uppercase',
+            }}>{loadProgress}%</span>
+          </div>
+        )}
+
+        {/* ── HERO UI ── */}
+        <div ref={heroUIRef} style={{
+          position:'absolute',inset:0,zIndex:10,pointerEvents:'none',
+          opacity:1,willChange:'opacity',
+        }}>
+          <nav style={{position:'absolute',top:0,left:0,right:0,padding:'22px 32px',
+            display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,
+              pointerEvents:'auto',cursor:'pointer'}}>
+              <span style={{width:6,height:6,borderRadius:'50%',display:'inline-block',
+                background:'#33ff00',animation:'dotPulse 2.8s ease-in-out infinite',
+                boxShadow:'0 0 8px #2fff00'}}/>
+              <span style={{fontFamily:'var(--font-geist-mono,monospace)',fontSize:11,
+                letterSpacing:'.38em',color:'rgba(255, 255, 255, 0.53)',textTransform:'uppercase'}}>
+                Heimdallr
+              </span>
+            </div>
+            <a href="/dashboard" style={{fontFamily:'var(--font-geist-mono,monospace)',
+              fontSize:11,letterSpacing:'.2em',color:'rgba(255, 255, 255, 0.51)',
+              textDecoration:'none',textTransform:'uppercase',pointerEvents:'auto'}}>
+              Access Portal ↗
+            </a>
+          </nav>
+
+          <div style={{position:'absolute',top:'50%',left:'50%',
+            transform:'translate(-50%,-50%)',
+            textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center'}}>
+            <p style={{fontFamily:'var(--font-geist-mono,monospace)',fontSize:10,
+              letterSpacing:'.46em',color:'rgba(251, 255, 0, 0.64)',textTransform:'uppercase',
+              marginBottom:22,animation:'slideUp .9s ease both'}}>
+              Distributed Proxy Infrastructure
+            </p>
+            <h1 style={{
+              fontFamily:'var(--font-syne,sans-serif)',
+              fontSize:'clamp(62px,10.5vw,148px)',fontWeight:800,lineHeight:.87,
+              letterSpacing:'-.026em',color:'#fff',textTransform:'uppercase',marginBottom:28,
+              textShadow:'3px 0 0 rgba(0,255,136,.16),-3px 0 0 rgba(56,189,248,.11)',
+              animation:'slideUp .9s ease .1s both',
+            }}>NODE<br/>ACCESS<br/>LAYER</h1>
+            <p style={{fontFamily:'var(--font-geist-mono,monospace)',fontSize:11,
+              letterSpacing:'.26em',color:'rgba(255, 255, 255, 0.8)',textTransform:'uppercase',
+              marginBottom:40,animation:'slideUp .9s ease .2s both'}}>
+              VLESS · Reality · gRPC · NRWX
+            </p>
+            <a href="/dashboard" style={{
+              display:'inline-flex',alignItems:'center',gap:12,padding:'13px 30px',
+              border:'1px solid rgba(255, 221, 0, 0.26)',borderRadius:2,
+              fontFamily:'var(--font-geist-mono,monospace)',fontSize:11,letterSpacing:'.26em',
+              color:'#ffee00',textTransform:'uppercase',textDecoration:'none',
+              background:'rgba(255, 255, 0, 0.11)',pointerEvents:'auto',cursor:'pointer',
+              animation:'slideUp .9s ease .3s both',
+            }}>Enter Portal →</a>
+          </div>
+        </div>
+
+        {/* Scroll hint — три шеврона */}
+        <div ref={hintRef} style={{
+          position:'absolute', bottom:32, left:'50%',
+          transform:'translateX(-50%)',
+          display:'flex', flexDirection:'column', alignItems:'center', gap:4,
+          opacity:1,
+          willChange:'transform, opacity',
+          pointerEvents:'none',
+        }}>
+          <span style={{
+            fontFamily:'var(--font-geist-mono,monospace)', fontSize:9,
+            letterSpacing:'.44em', color:'rgb(255, 255, 255)',
+            textTransform:'uppercase', marginBottom:6,
+            transition:'letter-spacing 0.3s ease',
+          }}>Scroll</span>
+          {[0,1,2].map(i => (
+            <svg key={i} width="18" height="10" viewBox="0 0 18 10" fill="none"
+              style={{
+                opacity: 0.25 + i * 0.15,
+                animation: `chevronFloat 2.4s ease-in-out ${i * 0.18}s infinite`,
+                transform: `translateY(${i * 2}px)`,
+              }}>
+              <polyline points="1,1 9,9 17,1"
+                stroke="rgb(255, 255, 255)" strokeWidth="1.5"
+                strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          ))}
+        </div>
+
+        {/* ── DATA UI ── */}
+        <div ref={dataUIRef} style={{
+          position:'absolute',inset:0,zIndex:10,opacity:0,pointerEvents:'none',
+          willChange:'opacity',
+          display:'flex',flexDirection:'column',justifyContent:'center',
+          alignItems:'center',padding:'64px 36px 52px',gap:40,
+        }}>
+          <div style={{textAlign:'center'}}>
+            <p style={{fontFamily:'var(--font-geist-mono,monospace)',fontSize:10,
+              letterSpacing:'.44em',color:'rgba(56, 191, 248, 0.81)',
+              textTransform:'uppercase',marginBottom:10}}>
+              System Architecture
+            </p>
+            <h2 style={{fontFamily:'var(--font-syne,sans-serif)',
+              fontSize:'clamp(32px,4.5vw,60px)',fontWeight:800,letterSpacing:'-.025em',
+              textTransform:'uppercase',color:'#fff',
+              textShadow:'2px 0 0 rgba(56,189,248,.1),-2px 0 0 rgba(0,255,136,.08)'}}>
+              Capabilities
+            </h2>
+          </div>
+          
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',
+            gap:8,width:'100%',maxWidth:900}}>
+            {FEATURES.map((f,i)=>(
+              <div key={i} style={{
+                padding:'17px 19px',border:'1px solid rgba(255,255,255,.065)',
+                borderRadius:8,background:'rgba(255,255,255,.03)',
+                backdropFilter:'blur(18px)',WebkitBackdropFilter:'blur(18px)',
+                display:'flex',flexDirection:'column',gap:5,pointerEvents:'auto',
+              }}>
+                <span style={{fontFamily:'var(--font-geist-mono,monospace)',fontSize:9,
+                  letterSpacing:'.3em',color:'rgba(255,255,255,.17)'}}>{f.n}</span>
+                <span style={{fontFamily:'var(--font-syne,sans-serif)',fontSize:13,
+                  fontWeight:700,letterSpacing:'.04em',textTransform:'uppercase',
+                  color:'rgba(255,255,255,.8)'}}>{f.t}</span>
+                <span style={{fontFamily:'var(--font-geist-mono,monospace)',fontSize:10,
+                  lineHeight:1.55,color:'rgba(255,255,255,.26)',fontStyle:'italic',
+                  marginTop:2}}>{f.d}</span>
+              </div>
+            ))}
+          </div>
+
+          <a href="/dashboard" style={{
+            display:'inline-flex',alignItems:'center',gap:12,padding:'14px 36px',
+            background:'#009dff',color:'#000',
+            fontFamily:'var(--font-geist-mono,monospace)',fontSize:11,fontWeight:500,
+            letterSpacing:'.22em',textTransform:'uppercase',textDecoration:'none',
+            borderRadius:2,pointerEvents:'auto',cursor:'pointer',
+          }}>Request Access →</a>
+        </div>
+
+        <div style={{position:'absolute',bottom:20,right:24,zIndex:20,
+          fontSize:18,color:'rgba(255,255,255,.42)',userSelect:'none',
+          pointerEvents:'none'}}>✦</div>
+      </div>
+    </div>
+  )
+}
+
+// ── Canvas fallback drawing (пока кадры грузятся) ─────────────────────────────
+function chromatic(ctx:CanvasRenderingContext2D,W:number,H:number,a:number,ts:number){
+  if(a<.03)return
+  ctx.save();ctx.globalCompositeOperation='screen'
+  const cy=H*.5,r=W*.38
+  const spec:Array<[number,number,number]>=[[0,100,66],[28,100,70],[54,100,72],[128,95,62],[184,100,64],[215,100,64],[258,82,59],[295,88,62]]
+  const side=(bx:number)=>{
+    for(let i=0;i<spec.length;i++){
+      const[h,s,l]=spec[i],ang=(i/spec.length)*Math.PI+ts*.00012
+      const ox=Math.cos(ang)*r*.22,oy=Math.sin(ang)*r*.28
+      const rr=r*(.68+.14*Math.sin(ts*.00038+i))
+      const g=ctx.createRadialGradient(bx+ox,cy+oy,0,bx+ox,cy+oy,rr)
+      const hh=(h+ts*.004)%360
+      g.addColorStop(0,`hsla(${hh},${s}%,${l}%,${a*.19})`)
+      g.addColorStop(.45,`hsla(${(hh+28)%360},${s}%,${l}%,${a*.08})`)
+      g.addColorStop(1,'transparent')
+      ctx.fillStyle=g;ctx.fillRect(0,0,W,H)
+    }
+    const cg=ctx.createRadialGradient(bx,cy,0,bx,cy,r*.22)
+    cg.addColorStop(0,`rgba(255,255,255,${a*.2})`);cg.addColorStop(1,'transparent')
+    ctx.fillStyle=cg;ctx.fillRect(0,0,W,H)
+  }
+  side(-W*.07);side(W*1.07);ctx.restore()
+}
+function particles(ctx:CanvasRenderingContext2D,W:number,_H:number,a:number,pts:Particle[]){
+  if(a<.04)return;ctx.save()
+  for(const p of pts){
+    const cd=Math.abs(p.x/W-.5)*2;if(cd<.13)continue
+    const ef=Math.min(1,(cd-.13)/.15)
+    ctx.globalAlpha=a*p.bright*ef*.65
+    ctx.fillStyle=`hsl(${p.hue},62%,82%)`
+    ctx.beginPath();ctx.arc(p.x,p.y,p.sz,0,6.2832);ctx.fill()
+  };ctx.restore()
+}
+function horizLine(ctx:CanvasRenderingContext2D,W:number,H:number,a:number,ts:number){
+  if(a<.04)return
+  const cy=H*.5,pp=.7+Math.sin(ts*.0025)*.3
+  ctx.save()
+  const lg=ctx.createLinearGradient(0,cy,W,cy)
+  lg.addColorStop(0,'transparent')
+  lg.addColorStop(.1,`rgba(255,255,255,${a*.38*pp})`)
+  lg.addColorStop(.5,`rgba(255,255,255,${a*.82*pp})`)
+  lg.addColorStop(.9,`rgba(255,255,255,${a*.38*pp})`)
+  lg.addColorStop(1,'transparent')
+  ctx.strokeStyle=lg;ctx.lineWidth=.75
+  ctx.beginPath();ctx.moveTo(0,cy);ctx.lineTo(W,cy);ctx.stroke();ctx.restore()
+}
+function grid(ctx:CanvasRenderingContext2D,W:number,H:number,a:number,ts:number){
+  if(a<.02)return
+  const cx=W*.5,cy=H*.5,breathe=Math.sin(ts*.0008)*.013
+  ctx.save();ctx.strokeStyle=`rgba(188,208,242,${a*.2})`;ctx.lineWidth=.6
+  for(let i=0;i<=24;i++){
+    const ny=((i/24)*H-cy)/cy
+    ctx.beginPath()
+    for(let x=0;x<=W;x+=5){
+      const nx=(x-cx)/cx,bulge=(1-Math.abs(ny))*nx*nx*.4
+      const yd=cy+ny*cy*(1+bulge+breathe)
+      x===0?ctx.moveTo(x,yd):ctx.lineTo(x,yd)
+    };ctx.stroke()
+  }
+  for(let i=0;i<=18;i++){
+    const nx=((i/18)*W-cx)/cx
+    ctx.beginPath()
+    for(let y=0;y<=H;y+=5){
+      const ny=(y-cy)/cy,xd=cx+nx*(1-Math.abs(ny)*.58+breathe)*cx
+      y===0?ctx.moveTo(xd,y):ctx.lineTo(xd,y)
+    };ctx.stroke()
+  }
+  const lg=ctx.createLinearGradient(0,cy,W,cy)
+  lg.addColorStop(0,'transparent');lg.addColorStop(.1,`rgba(220,235,255,${a*.58})`)
+  lg.addColorStop(.5,`rgba(255,255,255,${a})`);lg.addColorStop(.9,`rgba(220,235,255,${a*.58})`)
+  lg.addColorStop(1,'transparent')
+  ctx.strokeStyle=lg;ctx.lineWidth=1.5
+  ctx.beginPath();ctx.moveTo(0,cy);ctx.lineTo(W,cy);ctx.stroke()
+  const sl=ctx.createLinearGradient(0,cy-24,0,cy+24)
+  sl.addColorStop(0,'transparent');sl.addColorStop(.5,`rgba(200,220,255,${a*.06})`);sl.addColorStop(1,'transparent')
+  ctx.fillStyle=sl;ctx.fillRect(0,cy-24,W,48)
+  ctx.restore()
+}
+</file>
+
+<file path="web/ui/postcss.config.js">
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+</file>
+
+<file path="web/ui/tailwind.config.ts">
+import type { Config } from 'tailwindcss'
+
+const config: Config = {
+  content: [
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+  ],
+  theme: {
+    extend: {
+      fontFamily: {
+        display: ['var(--font-syne)', 'sans-serif'],
+        mono: ['var(--font-geist-mono)', 'monospace'],
+      },
+      colors: {
+        void:    '#000000',
+        surface: 'rgba(255,255,255,0.03)',
+        border:  'rgba(255,255,255,0.08)',
+        accent:  '#00ff88',
+        danger:  '#ff3b5c',
+        muted:   'rgba(255,255,255,0.35)',
+      },
+      backdropBlur: {
+        glass: '24px',
+      },
+      animation: {
+        'fade-in':    'fadeIn 0.6s ease forwards',
+        'slide-up':   'slideUp 0.5s cubic-bezier(0.16,1,0.3,1) forwards',
+        'pulse-slow': 'pulse 3s ease-in-out infinite',
+        'scan':       'scan 4s linear infinite',
+      },
+      keyframes: {
+        fadeIn:  { from: { opacity: '0' }, to: { opacity: '1' } },
+        slideUp: { from: { opacity: '0', transform: 'translateY(16px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
+        scan:    { from: { transform: 'translateY(-100%)' }, to: { transform: 'translateY(400%)' } },
+      },
+    },
+  },
+  plugins: [],
+}
+
+export default config
+</file>
+
+<file path="web/ui/tsconfig.json">
+{
+  "compilerOptions": {
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    "target": "ES2017"
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
+</file>
+
+<file path=".prettierrc.yaml">
+printWidth: 80           # Строгая длина строки
+tabWidth: 2              # Стандарт индустрии
+useTabs: false           # Только пробелы
+semi: true               # Точка с запятой обязательна
+singleQuote: true        # Одинарные кавычки
+trailingComma: "all"     # Запятые везде для чистоты диффов (Git diff)
+bracketSpacing: true     # Пробелы в объектах
+arrowParens: "always"    # Всегда скобки у стрелочных функций
+</file>
+
+<file path="frontend-Makefile">
+# Makefile — frontend targets для интеграции с общим Makefile
+# Копировать нужные targets в корневой Makefile проекта
+
+FRONTEND_DIR := ./frontend   # путь к Next.js проекту
+
+.PHONY: frontend-install frontend-dev frontend-build frontend-clean
+
+## Установить зависимости
+frontend-install:
+	cd $(FRONTEND_DIR) && npm ci
+
+## Запустить dev-сервер локально (hot reload + прокси к Go)
+frontend-dev:
+	cd $(FRONTEND_DIR) && npm run dev
+
+## Собрать статику → out/
+## Go Echo будет раздавать содержимое out/ как статические файлы
+frontend-build:
+	cd $(FRONTEND_DIR) && npm run build
+
+## Удалить артефакты сборки
+frontend-clean:
+	rm -rf $(FRONTEND_DIR)/.next $(FRONTEND_DIR)/out
+</file>
+
+<file path="multi_thread_test.sh">
+# 1. Настройки (замени на свои)
+URL="http://127.0.0.1:3000/api/stats"
+TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0ZWxlZ3JhbV9pZCI6MTIzNTI5NTE4MSwiZXhwIjoxNzc1MDM4MDE5LCJpYXQiOjE3NzQ5NTE2MTl9.U7tfG-wOlRoRVWtYgEV41ihqcaii8vnCpjCXVyVu3-U"
+COUNT=20  # сколько запросов отправить в параллель
+
+# 2. Цикл запуска
+echo "Запуск $COUNT запросов..."
+for i in $(seq 1 $COUNT); do
+    curl -s -X GET "$URL" \
+         -H "Authorization: Bearer $TOKEN" \
+         -H "Content-Type: application/json" \
+         -d '{"data": "test"}' \
+         -w "Запрос $i | Статус: %{http_code} | Время: %{time_total}s\n" \
+         -o /dev/null & 
+done
+
+# 3. Ждем завершения всех фоновых процессов
+wait
+echo "Готово."
+</file>
+
+<file path=".github/ISSUE_TEMPLATE/bug_report.md">
+---
+name: "Bug Report"
+about: Report a reproducible error.
+title: "BUG: [Component] Brief description"
+labels: ["status: triage", "type: bug"]
+---
+
+## Description
+Clear and concise description of the error.
+
+## Steps to Reproduce
+1. Command/Action:
+2. Environment state:
+3. Observed result:
+4. Expected result:
+
+## Environment Details
+- Version: [e.g. v1.2.3]
+- OS/Runtime: [e.g. Debian 12 / Node.js 20.x]
+- Configuration: [Provide relevant config snippets]
+
+## Logs / Stack Trace
+```bash
+# Paste logs here
+Additional Context
+Impact analysis and priority justification.
+```
+</file>
+
+<file path=".github/PULL_REQUEST_TEMPLATE.md">
+## Summary
+Linked Issue: #
+
+Detailed technical description of changes and architectural decisions.
+
+## Type of Change
+- [ ] FEAT: New functionality
+- [ ] FIX: Bug fix
+- [ ] REFACTOR: Code change that neither fixes a bug nor adds a feature
+- [ ] PERF: Performance improvement
+- [ ] BUILD: Changes affecting build system or dependencies
+
+## Verification Results
+### Automated Tests
+- Unit Tests: [Pass/Fail/NA]
+- Integration Tests: [Pass/Fail/NA]
+- Coverage Change: [%]
+
+### Manual Verification
+Describe the verification procedure and provide evidence (CLI output/Logs).
+
+## Compliance Checklist
+- [ ] Commits follow Conventional Commits specification.
+- [ ] Documentation updated (README, API specs, ADR).
+- [ ] No sensitive data included (secrets, personal data).
+- [ ] Linear history maintained (rebase performed).
+</file>
+
+<file path="internal/collector/bouncer.go">
+package collector
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
+)
+
+// EnforcerStore описывает методы БД, нужные для блокировки
+type EnforcerStore interface {
+	UpdateStatus(ctx context.Context, email string, isBlocked bool, expiresAt *time.Time) error
+}
+
+type EnforcerXray interface {
+	RemoveUser(ctx context.Context, inboundTag, email string) error
+}
+
+type AlertNotifier interface {
+	SendAlert(ctx context.Context, text string) error
+}
+
+type Bouncer struct {
+	store    EnforcerStore
+	xray     EnforcerXray
+	notifier AlertNotifier
+}
+
+// ВЫШЫБАЛА - отвечает за блокировку юзера в БД и отключение его от Xray.
+func NewBouncer(store EnforcerStore, xray EnforcerXray, notifier AlertNotifier) *Bouncer {
+	return &Bouncer{store: store, xray: xray, notifier: notifier}
+}
+
+func (b *Bouncer) BlockUser(ctx context.Context, user models.User) error {
+	slog.Warn("BOUNCER: blocking user", "email", user.Email)
+
+	// 1. Меняем статус в базе данных
+	if err := b.store.UpdateStatus(ctx, user.Email, true, user.ExpiresAt); err != nil {
+		return fmt.Errorf("db update failed: %w", err)
+	}
+
+	// 2. Удаляем пользователя из inbound в Xray.
+	if err := b.xray.RemoveUser(ctx, user.InboundTag, user.Email); err != nil {
+		return fmt.Errorf("xray remove failed: %w", err)
+	}
+
+	if b.notifier != nil {
+		msg := fmt.Sprintf("🚨 Пользователь %s автоматически заблокирован: превышен лимит трафика", user.Email)
+		if err := b.notifier.SendAlert(ctx, msg); err != nil {
+			slog.Error("failed to send block alert", "email", user.Email, "error", err)
+		}
+	}
+
+	slog.Info("BOUNCER: user successfully blocked", "email", user.Email)
+	return nil
+}
+</file>
+
+<file path="internal/db/user.go">
+package db
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
+	"gorm.io/gorm"
+)
+
+// ErrNotFound возвращается когда запись не найдена.
+// Определён здесь чтобы вызывающий код делал errors.Is(err, db.ErrNotFound)
+// без импорта gorm — снаружи никто не должен знать что внутри GORM.
+var ErrNotFound = errors.New("record not found")
+
+func (s *Store) CreateUser(ctx context.Context, user *models.User) error {
+	err := s.db.WithContext(ctx).Create(user).Error
+	if err != nil {
+		return fmt.Errorf("create user %s: %w", user.Email, err)
+	}
+	return nil
+}
+
+func (s *Store) GetAllUsers(ctx context.Context) ([]models.User, error) {
+	var users []models.User
+	err := s.db.WithContext(ctx).Find(&users).Error
+	if err != nil {
+		return nil, fmt.Errorf("fetch users: %w", err)
+	}
+	return users, nil
+}
+
+func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	var user models.User
+	err := s.db.WithContext(ctx).
+		Where("email = ?", email).
+		First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find user by email %s: %w", email, err)
+	}
+	return &user, nil
+}
+
+func (s *Store) FindUserByTelegramID(ctx context.Context, telegramID int64) (*models.User, error) {
+	var user models.User
+	err := s.db.WithContext(ctx).Where("telegram_id = ?", telegramID).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find user by telegram_id %d: %w", telegramID, err)
+	}
+	return &user, nil
+}
+
+func (s *Store) UpdateUser(ctx context.Context, user *models.User) error {
+	err := s.db.WithContext(ctx).Save(user).Error
+	if err != nil {
+		return fmt.Errorf("update user %s: %w", user.Email, err)
+	}
+	return nil
+}
+
+func (s *Store) DeleteUser(ctx context.Context, email string) error {
+	result := s.db.WithContext(ctx).Where("email = ?", email).Delete(&models.User{})
+	if result.Error != nil {
+		return fmt.Errorf("delete user %s: %w", email, result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UpdateStatus обновляет статус блокировки и дату истечения доступа.
+func (s *Store) UpdateStatus(ctx context.Context, email string, isBlocked bool, expiresAt *time.Time) error {
+	user := models.User{
+		IsBlocked: isBlocked,
+		ExpiresAt: expiresAt,
+	}
+
+	result := s.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where("email = ?", email).
+		Select("is_blocked", "expires_at").
+		Updates(&user)
+	if result.Error != nil {
+		return fmt.Errorf("update user status %s: %w", email, result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ResetTraffic сбрасывает лимит трафика пользователя (0 = без лимита).
+func (s *Store) ResetTraffic(ctx context.Context, email string) error {
+	result := s.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where("email = ?", email).
+		Update("traffic_limit", 0)
+	if result.Error != nil {
+		return fmt.Errorf("reset traffic for %s: %w", email, result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+</file>
+
+<file path="internal/models/user.go">
+package models
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+// User — учётная запись клиента для управления доступом в Xray.
+// UUID генерируется автоматически на стороне бэкенда (BeforeCreate),
+// чтобы исключить доверие к внешнему вводу.
+type User struct {
+	ID           uint       `json:"id"             gorm:"primaryKey"`
+	Email        string     `json:"email"          gorm:"uniqueIndex;not null"`
+	TelegramID   int64      `json:"telegram_id"    gorm:"uniqueIndex"`
+	// UUID хранится в legacy-совместимой колонке xray_uuid.
+	// Это позволяет обновлять сервис без ручного rename колонки на проде.
+	UUID         string     `json:"uuid"           gorm:"column:xray_uuid;uniqueIndex;not null"`
+	InboundTag   string     `json:"inbound_tag"    gorm:"index;not null;default:'inbound-main'"`
+	Flow         string     `json:"flow"           gorm:"default:''"`
+	VlessFlow    string     `json:"vless_flow"     gorm:"default:''"`
+	TrafficLimit int64      `json:"traffic_limit"`
+	IsBlocked    bool       `json:"is_blocked"     gorm:"index;default:false"`
+	ExpiresAt    *time.Time `json:"expires_at"     gorm:"index"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+// BeforeCreate гарантирует RFC4122 UUID до вставки записи в БД.
+func (u *User) BeforeCreate(_ *gorm.DB) error {
+	if u.Email == "" {
+		return fmt.Errorf("user email must not be empty")
+	}
+	if u.UUID == "" {
+		u.UUID = uuid.NewString()
+	}
+	if _, err := uuid.Parse(u.UUID); err != nil {
+		return fmt.Errorf("invalid uuid format: %w", err)
+	}
+	if u.InboundTag == "" {
+		u.InboundTag = "inbound-main"
+	}
+	return nil
+}
+</file>
+
+<file path="postman/collections/Heimdallr API/.resources/definition.yaml">
+$kind: collection
+name: Heimdallr API
+auth:
+  - id: 93b072ae-6908-4bab-83b7-10569c1cbde7
+    type: bearer
+    name: Bearer Token
+    credentials:
+      token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0ZWxlZ3JhbV9pZCI6MTIzNTI5NTE4MSwiZXhwIjoxNzc1MDM4MDE5LCJpYXQiOjE3NzQ5NTE2MTl9.U7tfG-wOlRoRVWtYgEV41ihqcaii8vnCpjCXVyVu3-U
+</file>
+
+<file path="postman/collections/Heimdallr API/2fa_test_confirm.request.yaml">
+$kind: http-request
+name: 2fa_test_confirm
+url: "{{base_url}}:{{port}}/api/auth/verify-otp"
+method: POST
+headers:
+  Connection: close
+body:
+  type: json
+  content: |-
+    {
+        "telegram_id": 1235295181,
+        "code": "093814" 
+    }
+auth:
+  credentials:
+    id: 93b072ae-6908-4bab-83b7-10569c1cbde7
+  type: inherit
+settings:
+  protocolVersion: http1
+order: 4490094283511885
+</file>
+
+<file path="postman/collections/Heimdallr API/2fa_test.request.yaml">
+$kind: http-request
+name: 2fa_test
+url: "{{base_url}}:{{port}}/api/auth/request-otp"
+method: POST
+headers:
+  Connection: close
+body:
+  type: json
+  content: |-
+    {
+        "telegram_id": 1235295181
+    }
+auth:
+  credentials:
+    id: 93b072ae-6908-4bab-83b7-10569c1cbde7
+  type: inherit
+settings:
+  protocolVersion: http1
+order: 4437432993904485
+</file>
+
+<file path="postman/collections/Multi_thread/multi_thread.request.yaml">
+$kind: http-request
+name: multi_thread
+url: http://127.0.0.1:3000/api/stats
+method: GET
+auth:
+  type: inherit
+  credentials:
+    id: a2d814e4-6122-42bf-b145-9fbc4476d3e5
+order: 1774952471754
+</file>
+
+<file path="postman/environments/Heimdallr-Dev.environment.yaml">
+name: Heimdallr-Dev
+values:
+  - key: base_url
+    value: ''
+    enabled: true
+  - key: api_token
+    value: ''
+    enabled: true
+  - key: port
+    value: ''
+    enabled: true
+</file>
+
+<file path="web/ui/src/app/layout.tsx">
+import type { Metadata } from 'next'
+import { Syne } from 'next/font/google'
+import { Geist_Mono } from 'next/font/google'
+import localFont from 'next/font/local'
+import './globals.css'
+
+// Display font — угловатый, технический, запоминающийся
+// const syne = Syne({
+//   subsets:  ['latin'],
+//   variable: '--font-syne',
+//   display:  'swap',
+// })
+
+const syne = localFont({
+  src: '../../public/fonts/syne-v24-latin-regular.woff2',
+  variable: '--font-syne',
+  display: 'swap',
+})
+
+// Mono font — для данных, меток, кодов
+// const geistMono = Geist_Mono({
+//   subsets:  ['latin'],
+//   variable: '--font-geist-mono',
+//   display:  'swap',
+// })
+
+const geistMono = localFont({
+  src: '../../public/fonts/geist-mono-v4-latin-regular.woff2',
+  variable: '--font-geist-mono',
+  display: 'swap',
+})
+
+export const metadata: Metadata = {
+  title:       'Heimdallr · Node Monitor',
+  description: 'Distributed access node management system',
+  // Запрещаем индексацию — это приватная панель
+  robots: { index: false, follow: false },
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" className={`${syne.variable} ${geistMono.variable}`}>
+      <body className="bg-void text-white antialiased">
+        {children}
+      </body>
+    </html>
+  )
+}
+</file>
+
+<file path="web/ui/next-env.d.ts">
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+import "./.next/types/routes.d.ts";
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+</file>
+
+<file path="web/ui/package.json">
+{
+  "name": "heimdallr-ui",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^16.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.27",
+    "eslint": "^8",
+    "eslint-config-next": "^15.0.0",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5"
+  }
+}
+</file>
+
+<file path=".commitlintrc.yaml">
+extends:
+  - "@commitlint/config-conventional"
+
+rules:
+  type-enum:
+    - 2
+    - always
+    - [feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert]
+  type-case: [2, always, lower-case]
+  subject-case: [2, always, lower-case]
+  subject-empty: [2, never]
+  subject-full-stop: [2, never, "."] # Запрет точки в конце заголовка
+  header-max-length: [2, always, 100]
+  
+  # Тело и футер явно необязательны
+  body-leading-blank: [0]
+  footer-leading-blank: [0]
+</file>
+
+<file path=".github/workflows/frontend-deploy.yml">
+name: "Deploy: Heimdallr Service"
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "deploy-heimdallr"
+  cancel-in-progress: true
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 1: Build Go binary
+  # ────────────────────────────────────────────────────────────────────────────
+  build-backend:
+    name: "Build: Go Binary"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Source: Checkout Repository"
+        uses: actions/checkout@v4
+
+      - name: "Setup: Initialize Go Environment"
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: true
+
+      - name: "Test: Backend Unit Build Check"
+        run: |
+          go test ./cmd/... ./internal/...
+
+      - name: "Build: Compile Static Binary"
+        # -trimpath удаляет локальные пути разработчика из бинарника, -ldflags="-s -w" убирает отладочную информацию для минимизации размера
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+          go build -trimpath -v -ldflags="-s -w" -o heimdallr ./cmd/heimdallr
+
+      - name: "Artifact: Upload Go Binary"
+        uses: actions/upload-artifact@v4
+        with:
+          name: heimdallr-binary
+          path: heimdallr
+          retention-days: 1
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 2: Build Next.js frontend (Monorepo Workspace)
+  # ────────────────────────────────────────────────────────────────────────────
+  build-frontend:
+    name: "Build: Next.js Static Export"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Source: Checkout Repository"
+        uses: actions/checkout@v4
+
+      - name: "Setup: Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: "Install: npm Dependencies"
+        run: npm ci --ignore-scripts
+
+      - name: "Build: Static Export → out/"
+        run: npm run build -w web/ui
+
+      - name: "Check: out directory exists"
+        run: test -d web/ui/out
+
+      - name: "Artifact: Upload Static Files"
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-static
+          path: web/ui/out/
+          retention-days: 1
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 3: Deliver artifacts to server
+  # ────────────────────────────────────────────────────────────────────────────
+  build-and-delivery:
+    name: "Delivery: Transfer to Server"
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+
+    steps:
+      - name: "Artifact: Download Go Binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: heimdallr-binary
+
+      - name: "Artifact: Download Frontend Static"
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-static
+          path: out/
+
+      - name: "Deploy: Transfer Binary to Server"
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key:      ${{ secrets.SSH_DEPLOY_USER_KEY }}
+          port:     ${{ secrets.SSH_PORT }}
+          source:   "heimdallr"
+          target:   "/var/www/heimdallr"
+
+      - name: "Deploy: Transfer Frontend Static to Server"
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key:      ${{ secrets.SSH_DEPLOY_USER_KEY }}
+          port:     ${{ secrets.SSH_PORT }}
+          source:   "out/"
+          target:   "/var/www/heimdallr"
+          # Результат: /var/www/heimdallr/out/ — совпадает с STATIC_DIR в .env
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 4: Service orchestration
+  # ────────────────────────────────────────────────────────────────────────────
+  service-orchestration:
+    name: "Service Management"
+    runs-on: ubuntu-latest
+    needs: build-and-delivery
+
+    steps:
+      - name: "Systemd: Restart Heimdallr Service"
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key:      ${{ secrets.SSH_DEPLOY_USER_KEY }}
+          port:     ${{ secrets.SSH_PORT }}
+          script: |
+            set -euo pipefail
+            sudo chmod +x /var/www/heimdallr/heimdallr
+            sudo systemctl restart heimdallr.service
+
+      - name: "Healthcheck: Verify Service Status"
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key:      ${{ secrets.SSH_DEPLOY_USER_KEY }}
+          port:     ${{ secrets.SSH_PORT }}
+          script: |
+            sudo systemctl is-active --quiet heimdallr.service || exit 1
+
+      - name: "Healthcheck: API Smoke Test"
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key:      ${{ secrets.SSH_DEPLOY_USER_KEY }}
+          port:     ${{ secrets.SSH_PORT }}
+          script: |
+            # Проверяем что / отдаёт 200 (Next.js index.html через Echo)
+            curl -fsS --retry 10 --retry-delay 2 http://localhost:${{ secrets.API_PORT }}/ -o /dev/null || exit 1
+            echo "Frontend serving: OK"
+</file>
+
+<file path="web/ui/next.config.ts">
+import type { NextConfig } from 'next'
+
+const isDev = process.env.NODE_ENV === 'development'
+
+const nextConfig: NextConfig = {
+  output: 'export',       // next build → /out — Go Echo раздаёт статику
+  trailingSlash: true,    // совместимость с file-based routing на статике
+  images: {
+    unoptimized: true,    // next/image без Node.js runtime
+  },
+  allowedDevOrigins: ['172.17.243.117'],
+  // В dev-режиме проксируем /api/* на Go (порт 3000)
+  // В проде rewrites не применяются (output: export), Go сам обрабатывает /api/*
+  ...(isDev && {
+    async rewrites() {
+      return [
+        {
+          source:      '/api/:path*',
+          destination: 'http://localhost:3000/api/:path*',
+        },
+      ]
+    },
+  }),
+}
+
+export default nextConfig
+</file>
+
+<file path=".env.example">
+APP_ENV=development
+DB_PATH=data/heimdallr.db
+SSH_DEPLOY_USER_KEY=~/.ssh/id_ed25519_deploy_heimdallr
+SSH_HOST=...
+SSH_PORT=...
+SSH_DEPLOY_USER=...
+XRAY_API_ADDR=127.0.0.1:10085
+TG_BOT_TOKEN=...
+TG_ADMIN_ID=...
+CLIENT_TUNNEL_PORT=10085
+SERVER_TUNNEL_PORT=10085
+API_ADMIN_TOKEN=...
+JWT_SECRET=...
+ADMIN_EMAIL=zd_mp
+COLLECT_INTERVAL=5s
+API_PORT=3000
+APP_PORT=3001
+STATIC_DIR=out
+LOCAL_STATIC_DIR=web/ui/out
+</file>
+
+<file path=".github/workflows/deploy.yml">
+name: "Deploy: Heimdallr Service"
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*' # Trigger on version tags like v1.0.0
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-delivery:
+    name: "Build & Artifact Delivery"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Source: Checkout Repository"
+        uses: actions/checkout@v4
+
+      - name: "Setup: Initialize Go Environment"
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+        
+      - name: "Build: Compile Static Binary"
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+          go build -v -ldflags="-s -w" -o heimdallr ./cmd/heimdallr
+          # Did the best i could to reduce the binary size
+      - name: "Deploy: Transfer Binary to Server"
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_DEPLOY_USER_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: "heimdallr"
+          target: "/var/www/heimdallr"
+      
+  service-orchestration:
+    name: "Service Management"
+    runs-on: ubuntu-latest
+    needs: build-and-delivery
+
+    steps:
+      - name: "Systemd: Restart Heimdalr Service"
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_DEPLOY_USER_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            sudo systemctl restart heimdallr.service
+      
+      - name: "Healthcheck: Verify Service Status"
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_DEPLOY_USER_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            sudo systemctl is-active --quiet heimdallr.service || exit 1
+</file>
+
+<file path=".github/CONTRIBUTING.md">
+## Git Workflow Policy
+
+### 1. Branching Strategy
+- `main`: Protected. No direct commits. Only Merge Requests (MR) from `release/` or `hotfix/`.
+- `develop`: Integration branch. All features must be merged here.
+- `feature/`: Format: `feature/<ISSUE-ID>-<short-description>`.
+- `hotfix/`: Format: `hotfix/<ISSUE-ID>-<short-description>`.
+
+---
+
+### 2. Commit Message Standard (Conventional Commits)
+<тип>(<область>): <описание>
+
+- All text must be in English.
+- Use imperative mood ("add", not "added").
+- Scope is mandatory for `feat` and `fix`.
+- Breaking Changes must be marked with `!` after the type: `feat(api)!: remove deprecated endpoint`.
+
+
+### Types
+- `feat` — new functionality
+- `fix` — fixing the bug
+- `docs` — documentation
+- `style` — formatting (no code change)
+- `refactor` — refactoring
+- `test` — tests
+- `chore` — maintenance (dependencies, assembly)
+- `perf` — performance improvement
+- `ci` — CI/CD setup
+
+---
+
+## Integration Policy
+
+### 1. Linear History Standard
+**Rebase over Merge**: All feature branches must be kept up-to-date with `main` using `git rebase main`. Merge commits in PRs are strictly prohibited. This ensures a clean, readable, and navigable project history where every commit is functional and sequential.
+
+### 2. Atomic Squash
+**Squash and Merge**: All PRs must be squashed into a single, high-quality atomic commit upon merging into `main`. The final squash commit message must strictly follow the Conventional Commits format (e.g., `feat(ui): add navbar`). 
+
+### 3. Cleanup
+**Branch Deletion**: Feature branches must be deleted immediately after a successful merge to keep the repository clean.
+</file>
+
+<file path="internal/collector/collector.go">
+package collector
+
+import (
+	"context"
+	"log/slog"
+	"time"
+
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
+)
+
+// CollectorStore — всё что коллектору нужно от хранилища.
+// Объединяем в один интерфейс намеренно: оба метода работают с БД,
+// это одна сущность с точки зрения коллектора.
+// GetAllUsers вызывается каждый тик — список всегда актуален,
+// новые пользователи подхватываются без перезапуска сервиса.
+type CollectorStore interface {
+	GetAllUsers(ctx context.Context) ([]models.User, error)
+	SaveHistory(ctx context.Context, history *models.UserHistory) error
+}
+
+// XrayClient остаётся отдельным интерфейсом — это другая сущность (сетевой клиент),
+// он может быть недоступен пока Store работает нормально.
+type XrayClient interface {
+	GetUserStats(ctx context.Context, email string) (models.UserStats, error)
+}
+
+// PresenceStore — минимальный контракт кэша online/offline статусов.
+// Коллектор пишет в этот кэш после каждой попытки опроса Xray.
+type PresenceStore interface {
+	Set(email string, online bool)
+}
+
+type Collector struct {
+	store    CollectorStore
+	xray     XrayClient
+	presence PresenceStore
+	pipeline *Pipeline
+	interval time.Duration
+}
+
+// NewCollector создаёт экземпляр сборщика.
+// Он принимает pipeline — это наша точка входа в асинхронную обработку.
+// Мы не блокируем основной цикл сбора (tick) тяжелыми операциями блокировки,
+// а просто выкидываем задачу в пайплайн.
+func NewCollector(store CollectorStore, xray XrayClient, presence PresenceStore, pipe *Pipeline, interval time.Duration) *Collector {
+	return &Collector{
+		store:    store,
+		xray:     xray,
+		presence: presence,
+		pipeline: pipe,
+		interval: interval,
+	}
+}
+
+// Run запускает коллектор. Блокирует до отмены ctx.
+// Вызывать: go collector.Run(ctx)
+func (c *Collector) Run(ctx context.Context) {
+	ticker := time.NewTicker(c.interval)
+	defer ticker.Stop()
+
+	slog.Info("collector started", "interval", c.interval)
+
+	for {
+		select {
+		case <-ticker.C:
+			c.tick(ctx)
+		case <-ctx.Done():
+			slog.Info("collector stopped")
+			return
+		}
+	}
+}
+
+// tick — один цикл сбора
+// В том числе делегируем задачи по блокировке пользователей в pipeline
+func (c *Collector) tick(ctx context.Context) {
+	users, err := c.store.GetAllUsers(ctx)
+	if err != nil {
+		slog.Error("collector: failed to fetch users", "error", err)
+		return
+	}
+
+	for _, user := range users {
+		// Пропускаем уже заблокированных
+		if user.IsBlocked {
+			continue
+		}
+
+		stats, err := c.xray.GetUserStats(ctx, user.Email)
+		if err != nil {
+			if c.presence != nil {
+				c.presence.Set(user.Email, false)
+			}
+			// Ошибка одного пользователя не останавливает остальных.
+			slog.Error("collector: failed to fetch stats from Xray API", "email", user.Email, "error", err)
+			continue
+		}
+		if c.presence != nil {
+			c.presence.Set(user.Email, true)
+		}
+
+		// Лимит: Downlink + Uplink
+		if user.TrafficLimit > 0 && (stats.Downlink+stats.Uplink) > user.TrafficLimit {
+			slog.Warn("limit exceeded, submitting to pipeline", "email", user.Email)
+			c.pipeline.Submit(user)
+		}
+
+		history := &models.UserHistory{
+			Email:     stats.Email,
+			Downlink:  stats.Downlink,
+			Uplink:    stats.Uplink,
+			CreatedAt: time.Now().UTC(),
+		}
+
+		if err := c.store.SaveHistory(ctx, history); err != nil {
+			slog.Error("collector: failed to save history", "email", user.Email, "error", err)
+		}
+	}
+}
+</file>
+
+<file path="internal/db/store.go">
+package db
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+)
+
+// Store — единственная точка доступа к базе данных.
+// Приватное поле db *gorm.DB не утекает наружу никогда.
+// Все методы определены в соседних файлах пакета db.
+type Store struct {
+	db *gorm.DB
+}
+
+func NewStore(dsn string) (*Store, error) {
+	// SQLite создаёт файл сам, но директория должна существовать заранее.
+	dir := filepath.Dir(dsn)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("create db directory %s: %w", dir, err)
+	}
+
+	// Добавляем параметры оптимизации к DSN
+    // WAL позволяет читать и писать одновременно без блокировок
+    optimizedDSN := dsn + "?_journal_mode=WAL&_busy_timeout=5000"
+
+    db, err := gorm.Open(sqlite.Open(optimizedDSN), &gorm.Config{
+        Logger: logger.Default.LogMode(logger.Silent),
+    })
+    if err != nil {
+        return nil, fmt.Errorf("failed to connect db: %w", err)
+    }
+
+    sqlDB, err := db.DB()
+    if err != nil {
+        return nil, err
+    }
+
+	// Ограничиваем до 1 соединения для записи, так как SQLite — это файл.
+    // Это наш системный семафор на уровне драйвера.
+    sqlDB.SetMaxOpenConns(1)
+
+	// Автомиграция создает таблицы по указанным моделям при запуске
+    if err := db.AutoMigrate(
+		&models.User{}, 
+		&models.UserHistory{},
+		&models.OTPCode{},
+	); err != nil {
+        return nil, fmt.Errorf("migration failed: %w", err)
+    }
+	
+	return &Store{ db: db }, nil
+}
+</file>
+
+<file path=".gitignore">
+# Бинарники
+bin/
+/heimdallr
+
+# Логи и база
+*.log
+*.db
+*.db-journal
+
+# Зависимости
+node_modules/
+dist/
+
+# Секреты и конфиги
+.env
+configs/config.yaml
+
+# IDE
+.idea/
+.vscode/
+
+# Сборки и временные файлы
+build/
+tmp/
+.next/
+out/
+
+make_ai_zips.sh
+ai_bundle/
+</file>
+
+<file path="internal/models/stats.go">
+package models
+
+import (
+	"context"
+	"time"
+)
+
+// StatsProvider — интерфейс для получения живой статистики.
+// Реализуется сервисным слоем (service.StatsService).
+// Бот и API зависят от этого интерфейса, а не от конкретного сервиса.
+type StatsProvider interface {
+	GetUserStats(ctx context.Context, email string) (UserStats, error)
+}
+
+// UserStats — транспортная структура для передачи живых данных из Xray.
+// Не является моделью БД — тегов gorm здесь нет намеренно.
+// Uplink и Downlink хранятся в байтах (raw от Xray).
+type UserStats struct {
+	Email    string `json:"email"`
+	Downlink int64  `json:"downlink_bytes"`
+	Uplink   int64  `json:"uplink_bytes"`
+}
+
+// UserHistory — запись в БД, один снимок состояния трафика пользователя.
+// Таблица растёт со временем — это временной ряд.
+// Email здесь просто index (не uniqueIndex) — у одного пользователя много записей.
+type UserHistory struct {
+	ID        uint      `json:"id"          gorm:"primaryKey"`
+	Email     string    `json:"email"       gorm:"index;not null"`
+	Downlink  int64     `json:"downlink_bytes"`
+	Uplink    int64     `json:"uplink_bytes"`
+	
+	ActiveConns int  `json:"active_conns"`
+	IsBlocked   bool `json:"is_blocked"`
+
+	CreatedAt time.Time `json:"created_at"  gorm:"index;not null"`
+}
+
+// OTPCode — одноразовый код для 2FA.
+// TTL контролируется полем ExpiresAt — фоновая чистка удаляет просроченные записи.
+// Один активный код на пользователя — при запросе нового старый перезаписывается.
+type OTPCode struct {
+	ID        uint      `json:"id"         gorm:"primaryKey"`
+	AdminID   int64     `json:"admin_id"   gorm:"uniqueIndex;not null"`
+	Code      string    `json:"-"          gorm:"not null"`
+	ExpiresAt time.Time `json:"expires_at" gorm:"not null"`
+	Used      bool      `json:"-"          gorm:"default:false"`
+}
+</file>
+
+<file path="internal/bot/bot.go">
+package bot
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
+	telebot "gopkg.in/telebot.v3"
+)
+
+type Bot struct {
+	Api           *telebot.Bot
+	AdminID       int64
+	adminEmail    string
+	statsProvider models.StatsProvider
+}
+
+func NewBot(sp models.StatsProvider, adminEmail string) (*Bot, error) {
+	token := os.Getenv("TG_BOT_TOKEN")
+	if token == "" {
+		return nil, fmt.Errorf("environment variable TG_BOT_TOKEN is not set")
+	}
+
+	adminIDStr := os.Getenv("TG_ADMIN_ID")
+	adminID, err := strconv.ParseInt(adminIDStr, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid TG_ADMIN_ID %q: %w", adminIDStr, err)
+	}
+
+	api, err := telebot.NewBot(telebot.Settings{
+		Token:  token,
+		Poller: &telebot.LongPoller{Timeout: 10 * time.Second},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Telegram bot: (check network/token)")
+	}
+
+	return &Bot{
+		Api:           api,
+		AdminID:       adminID,
+		adminEmail:    adminEmail,
+		statsProvider: sp,
+	}, nil
+}
+
+func (b *Bot) Start() {
+	b.Api.Handle("/start", telebot.HandlerFunc(b.handleStart))
+	b.Api.Handle("/stats", telebot.HandlerFunc(b.handleStats))
+
+	slog.Info("telegram bot started", "admin_id", maskID(b.AdminID))
+	b.Api.Start()
+}
+
+// SendOTP отправляет одноразовый код администратору в Telegram.
+// Реализует интерфейс api.Notifier — сервер вызывает этот метод при запросе 2FA.
+// Метод публичный и принимает конкретный telegramID — в будущем можно слать разным юзерам.
+func (b *Bot) SendOTP(ctx context.Context, telegramID int64, code string) error {
+	recipient := &telebot.User{ID: telegramID}
+	msg := fmt.Sprintf(
+		"Ваш код подтверждения: <b>%s</b>\n\nДействует 5 минут. Никому не сообщайте.",
+		code,
+	)
+	_, err := b.Api.Send(recipient, msg, telebot.ModeHTML)
+	if err != nil {
+		return fmt.Errorf("send otp to telegram_id %d: %w", telegramID, err)
+	}
+	return nil
+}
+
+// SendAlert отправляет техническое уведомление администратору.
+func (b *Bot) SendAlert(ctx context.Context, text string) error {
+	recipient := &telebot.User{ID: b.AdminID}
+	if _, err := b.Api.Send(recipient, text); err != nil {
+		return fmt.Errorf("send alert to admin %d: %w", b.AdminID, err)
+	}
+	return nil
+}
+
+func (b *Bot) handleStart(c telebot.Context) error {
+	slog.Info("bot command received", "command", "/start", "user_id", c.Sender().ID)
+	return c.Send("Welcome to Heimdallr Proxy!")
+}
+
+func (b *Bot) handleStats(c telebot.Context) error {
+	slog.Info("bot command received", "command", "/stats", "user_id", c.Sender().ID)
+ 
+	if c.Sender().ID != b.AdminID {
+		slog.Warn("unauthorized /stats attempt",
+			"user_id", c.Sender().ID,
+			"username", c.Sender().Username,
+		)
+		return c.Send("Access denied.")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+ 
+	stats, err := b.statsProvider.GetUserStats(ctx, b.adminEmail)
+	if err != nil {
+		slog.Error("bot: failed to get stats", "error", err, "user_id", c.Sender().ID)
+		return c.Send("Failed to retrieve statistics. Please try again later.")
+	}
+ 
+	msg := fmt.Sprintf(
+		"Статистика (%s)\n↓ Down: %.2f MB\n↑ Up:   %.2f MB",
+		stats.Email,
+		float64(stats.Downlink)/(1024*1024),
+		float64(stats.Uplink)/(1024*1024),
+	)
+	return c.Send(msg)
+}
+
+func maskID(id int64) string {
+	s := strconv.FormatInt(id, 10)
+	if len(s) <= 3 {
+		return "*******"
+	}
+	return "*******" + s[len(s)-3:]
+}
+</file>
+
+<file path="internal/xray/stats.go">
+package xray
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
+	hsc "github.com/xtls/xray-core/app/proxyman/command" // hsc = Handler Service Command
+	ssc "github.com/xtls/xray-core/app/stats/command"    // ssc = Stats Service Command
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/serial"
+	vless "github.com/xtls/xray-core/proxy/vless"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
+)
+
+// Client — низкоуровневый gRPC клиент к Xray Stats API.
+// Не логирует — только возвращает ошибки. Логирование на стороне вызывающего кода.
+type Client struct {
+	apiAddr       string
+	conn          *grpc.ClientConn
+	statsClient   ssc.StatsServiceClient
+	handlerClient hsc.HandlerServiceClient
+	mu            sync.Mutex
+}
+
+// NewClient создаёт клиент. При ошибке соединения не падает — Xray может
+// подняться позже (например, туннель ещё не установлен). Ошибку первого
+// соединения логирует вызывающий код через проверку после NewClient.
+func NewClient(addr string) (*Client, error) {
+	if addr == "" {
+		return nil, fmt.Errorf("xray api address must not be empty")
+	}
+
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		// Возвращаем клиент без соединения — reconnect произойдёт при первом вызове.
+		// Ошибку тоже возвращаем, чтобы main мог залогировать предупреждение.
+		return &Client{apiAddr: addr, conn: nil}, fmt.Errorf("initial grpc dial %s: %w", addr, err)
+	}
+
+	return &Client{
+		apiAddr:       addr,
+		conn:          conn,
+		statsClient:   ssc.NewStatsServiceClient(conn),
+		handlerClient: hsc.NewHandlerServiceClient(conn),
+	}, nil
+}
+
+// GetUserStats получает статистику трафика для конкретного пользователя по email.
+// email — идентификатор пользователя в конфиге Xray (поле "email" в inbound).
+func (c *Client) GetUserStats(ctx context.Context, email string) (models.UserStats, error) {
+	if err := c.ensureConnected(); err != nil {
+		return models.UserStats{}, err
+	}
+
+	// Xray Stats API: паттерн "user>>>EMAIL>>>traffic" возвращает uplink + downlink.
+	req := &ssc.QueryStatsRequest{
+		Pattern: fmt.Sprintf("user>>>%s>>>traffic", email),
+		Reset_:  false,
+	}
+
+	// Создаём собственный таймаут поверх входящего ctx — gRPC вызов не должен висеть вечно.
+	queryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	res, err := c.statsClient.QueryStats(queryCtx, req)
+	if err != nil {
+		return models.UserStats{}, fmt.Errorf("query xray stats for %s: %w", email, err)
+	}
+	if res == nil {
+		return models.UserStats{}, fmt.Errorf("empty response from xray stats api for %s", email)
+	}
+
+	// Раскладываем ответ в карту для удобного доступа по имени метрики.
+	metrics := make(map[string]int64, len(res.Stat))
+	for _, stat := range res.Stat {
+		metrics[stat.Name] = stat.Value
+	}
+
+	// Xray возвращает байты — конвертируем в мегабайты для отображения.
+	upBytes := metrics[fmt.Sprintf("user>>>%s>>>traffic>>>uplink", email)]
+	downBytes := metrics[fmt.Sprintf("user>>>%s>>>traffic>>>downlink", email)]
+
+	return models.UserStats{
+		Email:    email,
+		Uplink:   upBytes,
+		Downlink: downBytes,
+	}, nil
+}
+
+// AddUser добавляет пользователя в указанный inbound через HandlerService.
+func (c *Client) AddUser(ctx context.Context, user models.User) error {
+	if err := c.ensureConnected(); err != nil {
+		return err
+	}
+
+	if user.Email == "" {
+		return fmt.Errorf("email must not be empty")
+	}
+	if user.UUID == "" {
+		return fmt.Errorf("uuid must not be empty")
+	}
+	if user.InboundTag == "" {
+		return fmt.Errorf("inbound tag must not be empty")
+	}
+
+	// Поддерживаем оба поля модели: приоритет у VlessFlow,
+	// fallback на Flow для обратной совместимости payload.
+	flow := user.VlessFlow
+	if flow == "" {
+		flow = user.Flow
+	}
+
+	account := &vless.Account{
+		Id:         user.UUID,
+		Flow:       flow,
+		Encryption: "none",
+	}
+
+	operation := serial.ToTypedMessage(&hsc.AddUserOperation{
+		User: &protocol.User{
+			Email:   user.Email,
+			Level:   0,
+			Account: serial.ToTypedMessage(account),
+		},
+	})
+
+	callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	_, err := c.handlerClient.AlterInbound(callCtx, &hsc.AlterInboundRequest{
+		Tag:       user.InboundTag,
+		Operation: operation,
+	})
+	if err != nil {
+		return fmt.Errorf("xray add user %s on inbound %s: %w", user.Email, user.InboundTag, err)
+	}
+
+	return nil
+}
+
+// RemoveUser удаляет пользователя из указанного inbound по email.
+func (c *Client) RemoveUser(ctx context.Context, inboundTag, email string) error {
+	if err := c.ensureConnected(); err != nil {
+		return err
+	}
+	if inboundTag == "" {
+		return fmt.Errorf("inbound tag must not be empty")
+	}
+	if email == "" {
+		return fmt.Errorf("email must not be empty")
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	_, err := c.handlerClient.AlterInbound(callCtx, &hsc.AlterInboundRequest{
+		Tag: inboundTag,
+		Operation: serial.ToTypedMessage(&hsc.RemoveUserOperation{
+			Email: email,
+		}),
+	})
+	if err != nil {
+		return fmt.Errorf("xray remove user %s from inbound %s: %w", email, inboundTag, err)
+	}
+
+	return nil
+}
+
+// Close закрывает gRPC соединение. Вызывать при graceful shutdown.
+func (c *Client) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn != nil {
+		return c.conn.Close()
+	}
+	return nil
+}
+
+// ensureConnected проверяет соединение и переподключается если нужно.
+// Выделено в отдельный метод чтобы не засорять GetUserStats.
+func (c *Client) ensureConnected() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.conn != nil {
+		state := c.conn.GetState()
+		if state != connectivity.Shutdown {
+			return nil
+		}
+		_ = c.conn.Close()
+		c.conn = nil
+	}
+
+	baseDelay := 200 * time.Millisecond
+	maxAttempts := 5
+
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		conn, err := grpc.NewClient(c.apiAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err == nil {
+			c.conn = conn
+			c.statsClient = ssc.NewStatsServiceClient(conn)
+			c.handlerClient = hsc.NewHandlerServiceClient(conn)
+			return nil
+		}
+		lastErr = err
+
+		delay := baseDelay << attempt
+		if delay > 3*time.Second {
+			delay = 3 * time.Second
+		}
+		time.Sleep(delay)
+	}
+
+	return fmt.Errorf("reconnect to xray api at %s failed after %d attempts: %w", c.apiAddr, maxAttempts, lastErr)
+}
+</file>
+
+<file path="go.mod">
+module github.com/ZeroD1vision/heimdallr-proxy
+
+go 1.25.6
+
+require (
+	github.com/glebarez/sqlite v1.11.0
+	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/google/uuid v1.6.0
+	github.com/labstack/echo/v4 v4.15.1
+	github.com/xtls/xray-core v1.8.24
+	google.golang.org/grpc v1.79.1
+	gopkg.in/telebot.v3 v3.3.8
+	gorm.io/gorm v1.31.1
+)
+
+require (
+	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/cloudflare/circl v1.4.0 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/glebarez/go-sqlite v1.21.2 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/klauspost/compress v1.17.8 // indirect
+	github.com/labstack/gommon v0.4.2 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/pires/go-proxyproto v0.11.0 // indirect
+	github.com/quic-go/quic-go v0.46.0 // indirect
+	github.com/refraction-networking/utls v1.6.7 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/sagernet/sing v0.7.18 // indirect
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/valyala/fasttemplate v1.2.2 // indirect
+	github.com/xtls/reality v0.0.0-20240712055506-48f0b2d5ed6d // indirect
+	golang.org/x/crypto v0.48.0 // indirect
+	golang.org/x/net v0.51.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
+	modernc.org/libc v1.22.5 // indirect
+	modernc.org/mathutil v1.5.0 // indirect
+	modernc.org/memory v1.5.0 // indirect
+	modernc.org/sqlite v1.23.1 // indirect
+)
+</file>
+
+<file path="Makefile">
+# ==============================================================================
+# HEIMDALLR MAKEFILE
+# ==============================================================================
+
+# Подгружаем переменные окружения
+ifneq (,$(wildcard ./.env))
+    include .env
+endif
+
+# --- Константы путей ---
+FRONTEND_DIR := ./web/ui
+BUILD_DIR    := ./bin
+BINARY_NAME  := heimdallr
+GO_PKG       := ./cmd/heimdallr
+
+# --- Параметры туннеля ---
+SSH_USER := $(SSH_DEPLOY_USER)
+KEY_PATH := $(SSH_DEPLOY_USER_KEY)
+HOST     := $(SSH_HOST)
+PORT     := $(SSH_PORT)
+L_PORT   := $(CLIENT_TUNNEL_PORT)
+R_PORT   := $(SERVER_TUNNEL_PORT)
+
+# --- Параметры тестирования (Shadow Deploys) ---
+TEST_BINARY_NAME := heimdallr-test
+TEST_PORT        := 4000
+REMOTE_ENV_PATH  := /var/www/heimdallr/.env
+
+# --- Пути к прото файлам ---
+PROTO_DIR := ./api/proto
+PROTO_OUT := ./internal/xray/proto
+
+# --- Proto toolchain ---
+PROTOC        ?= protoc
+PROTO_SRC_DIR := ./api/proto
+PROTO_GEN_DIR := ./internal/xray/proto
+PROTO_STAMP   := $(PROTO_GEN_DIR)/.stamp
+
+PROTO_FILES := \
+    $(PROTO_SRC_DIR)/app/proxyman/command/command.proto \
+    $(PROTO_SRC_DIR)/app/proxyman/config.proto
+
+PROTO_DEPS := \
+    $(shell find $(PROTO_SRC_DIR) -type f -name '*.proto' 2>/dev/null)
+
+# 1. Сначала пытаемся взять из .env (уже сделано через include)
+# 2. Если переменная пустая или не задана, устанавливаем фолбек
+ifeq ($(LOCAL_STATIC_DIR),)
+    LOCAL_STATIC_DIR := ./web/ui/out
+endif
+
+# --- Настройки сборки ---
+# Используем CGO_ENABLED=0 для создания переносимого бинарника (Static Binary)
+GO_BUILD_FLAGS := CGO_ENABLED=0 go build -trimpath -ldflags="-s -w"
+# Выносим флаги npm install в отдельную переменную для избежания встроенного парсинга Makefile
+# Игнорируем скрипты, так как там хаски и ей подобные, которые выполнятся при каждом npm install
+# а для нас это критично, так как мы используем монорепо а там несколько package.json с 
+# разными скриптами, которые не должны выполняться при установке зависимостей и ломают сборку
+# --include=dev нужен для установки devDependencies, так как они не будут устаналвиваться изза 
+# --ignore-scripts, а для сборки фронтенда они нужны
+NPM_INSTALL_FLAGS := --ignore-scripts --include=dev
+
+# .PHONY сообщает make, что это команды, а не названия файлов на диске
+.PHONY: help build ui-build ui-install go-build go-deps dev dev-ui tunnel stop clean db-reset \
+        prod-check deploy-test stop-test tunnel-test setup \
+		proto proto-check proto-clean proto-verify test-backend test-race
+
+# Команда по умолчанию
+all: build
+
+help: ## Показать справку по всем командам.
+	@grep -Eh '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+	awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+
+# ==============================================================================
+# ИНИЦИАЛИЗАЦИЯ И УСТАНОВКА
+# ==============================================================================
+
+setup: ## Полная инициализация проекта (Go + Node + Husky)
+	@echo "--- [INIT] Setting up development environment ---"
+	go mod download
+	npm install
+	@echo "✔ Environment ready. Husky hooks installed."
+
+
+# ==============================================================================
+# FRONTEND (NEXT.JS)
+# ==============================================================================
+
+ui-install: ## Установить зависимости через монорепо
+	@echo "--- [UI] Installing all dependencies from root ---"
+	npm install $(NPM_INSTALL_FLAGS)
+
+ui-build: ui-install ## Собрать фронтенд через workspace
+	@echo "--- [UI] Building static export ---"
+	NODE_ENV=production npm run build -w web/ui
+
+dev-ui: ## Запустить dev-сервер фронтенда
+	@echo "--- [UI] Starting dev server ---"
+	npm run dev -w web/ui
+
+# ==============================================================================
+# PROTOBUF / GRPC CODEGEN
+# ==============================================================================
+
+proto-check: ## Проверить наличие protoc и go-плагинов
+	@command -v $(PROTOC) >/dev/null || (echo "ERROR: protoc not found"; exit 1)
+	@command -v protoc-gen-go >/dev/null || (echo "ERROR: protoc-gen-go not found"; exit 1)
+	@command -v protoc-gen-go-grpc >/dev/null || (echo "ERROR: protoc-gen-go-grpc not found"; exit 1)
+	@test -d "$(PROTO_SRC_DIR)" || (echo "ERROR: $(PROTO_SRC_DIR) not found"; exit 1)
+
+$(PROTO_STAMP): $(PROTO_DEPS) proto-check
+	@echo "--- [PROTO] Generating Go stubs ---"
+	@mkdir -p $(PROTO_GEN_DIR)
+	@$(PROTOC) -I $(PROTO_SRC_DIR) \
+		--go_out=$(PROTO_GEN_DIR) --go_opt=paths=source_relative \
+		--go-grpc_out=$(PROTO_GEN_DIR) --go-grpc_opt=paths=source_relative \
+		$(PROTO_FILES)
+	@touch $(PROTO_STAMP)
+	@echo "✔ Proto generated"
+
+proto: $(PROTO_STAMP) ## Сгенерировать protobuf/gRPC код
+
+proto-clean: ## Очистить сгенерированные proto-файлы
+	@rm -rf $(PROTO_GEN_DIR)
+	@echo "✔ Proto artifacts removed"
+
+proto-verify: proto ## Проверить, что сгенерированный код закоммичен (для CI)
+	@git diff --quiet -- $(PROTO_GEN_DIR) || \
+		(echo "ERROR: generated proto code is out of date. Run 'make proto' and commit changes."; exit 1)
+	@echo "✔ Proto code is up-to-date"
+
+# ==============================================================================
+# BACKEND (GO)
+# ==============================================================================
+
+go-deps: ## Синхронизировать зависимости Go
+	@echo "--- [GO] Tidying modules ---"
+	go mod tidy
+
+go-build: go-deps ## Собрать только Go бинарник
+	@echo "--- [GO] Building binary ---"
+	$(GO_BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(GO_PKG)
+
+test-backend: ## Прогнать backend тесты (без frontend)
+	@echo "--- [TEST] Running backend tests ---"
+	go test ./cmd/... ./internal/...
+
+test-race: ## Прогнать backend тесты с race detector
+	@echo "--- [TEST] Running backend race tests ---"
+	go test -race ./cmd/... ./internal/...
+
+
+# ==============================================================================
+# КОМБИНИРОВАННЫЕ КОМАНДЫ (DEVELOPMENT & PROD)
+# ==============================================================================
+
+build: ui-build go-build ## Полная сборка проекта: фронтенд вшивается в бинарник
+	@echo "✔ Project successfully built in $(BUILD_DIR)/$(BINARY_NAME)"
+
+dev: tunnel ## Запуск бэкенда с активным туннелем (для работы над API)
+	@echo "--- [DEV] Starting backend with tunnel ---"
+	go run $(GO_PKG)
+
+tunnel: ## Открыть SSH туннель к удаленному серверу для стат Xray
+	@echo "--- [NET] Opening tunnel to $(HOST) ---"
+	@pkill -f "^ssh.*$(L_PORT):127.0.0.1:$(R_PORT)" || true
+	@ssh -i $(KEY_PATH) -p $(PORT) -f -N -L $(L_PORT):127.0.0.1:$(R_PORT) $(SSH_USER)@$(HOST)
+	@echo "✔ Tunnel active: localhost:$(L_PORT) -> remote:$(R_PORT)"
+
+# Ищем только процесс, который заканчивается на /$(BINARY_NAME)
+# или является именно этим бинарником, исключая саму команду make
+stop: ## Остановить все локальные фоновые процессы (туннели)
+	@echo "--- [CLEAN] Stopping local processes ---"
+	@pkill -f "^ssh.*$(L_PORT):127.0.0.1:$(R_PORT)" || true
+	@pkill -f "/$(BINARY_NAME)$$" || true
+	@echo "✔ Done"
+
+db-reset: ## Удалить локальную БД для чистого старта
+	@rm -f data/heimdallr.db
+	@echo "✔ Database reset"
+
+clean: stop ## Полная очистка артефактов сборки
+	rm -rf $(BUILD_DIR)
+	rm -rf $(FRONTEND_DIR)/out
+	rm -rf $(FRONTEND_DIR)/.next
+	@echo "✔ Artifacts removed"
+
+# ==============================================================================
+# ТЕСТИРОВАНИЕ И ВАЛИДАЦИЯ (SHADOW DEPLOY)
+# ==============================================================================
+
+# Копируем .env, чтобы бинарник не падал из-за отсутствия токенов 
+prod-check: clean ui-build go-build ## Проверка билда в изоляции (имитируем сервер локально)
+	@echo "--- [TEST] Running production-ready binary in isolation ---"
+	@mkdir -p $(BUILD_DIR)/test_isolation/out
+	@cp $(BUILD_DIR)/$(BINARY_NAME) $(BUILD_DIR)/test_isolation/
+	@cp .env $(BUILD_DIR)/test_isolation/ 2>/dev/null || echo "WARN: .env not found"
+	@cp -r $(LOCAL_STATIC_DIR)/* $(BUILD_DIR)/test_isolation/out/
+	@echo "✔ Binary moved to isolation. Checking go:embed..."
+	# Запуск из папки без доступа к web/ui/out
+	cd $(BUILD_DIR)/test_isolation && export $$(grep -v '^#' .env) && ./$(BINARY_NAME)
+
+# nohup позволяет процессу жить после закрытия SSH сессии, а перенаправление вывода в лог 
+# помогает отлавливать ошибки и видеть, что происходит внутри тестового экземпляра
+deploy-test: stop-test build ## Собрать и запустить тестовый бинарник на сервере (порт 4000)
+	@echo "--- [DEPLOY] Sending test binary to /tmp on $(HOST) ---"
+	scp -i $(KEY_PATH) -P $(PORT) $(BUILD_DIR)/$(BINARY_NAME) $(SSH_USER)@$(HOST):/tmp/$(TEST_BINARY_NAME)
+# 	@echo "--- [DEPLOY] Sending test UI folder to /tmp on $(HOST) ---"
+# 	scp -r -i $(KEY_PATH) -P $(PORT) $(LOCAL_STATIC_DIR)/ $(SSH_USER)@$(HOST):/tmp/out
+	@echo "--- [UI] Archiving 110MB and sending (Fast Mode) ---"
+	@# 1. Создаем архив локально (без лишних метаданных для скорости)
+	@tar -czf ui_bundle.tar.gz -C $(LOCAL_STATIC_DIR) .
+
+	@# 2. Перекидываем ОДИН файл (он пойдет на твоем 1MB/s без затыков)
+	scp -i $(KEY_PATH) -P $(PORT) ui_bundle.tar.gz $(SSH_USER)@$(HOST):/tmp/ui_bundle.tar.gz
+	
+	@# 3. Распаковываем на сервере и подметаем мусор
+	ssh -i $(KEY_PATH) -p $(PORT) $(SSH_USER)@$(HOST) \
+		"rm -rf /tmp/out/* && \
+		mkdir -p /tmp/out && \
+		tar -xzf /tmp/ui_bundle.tar.gz -C /tmp/out && \
+		rm /tmp/ui_bundle.tar.gz"
+	
+	@# 4. Удаляем локальный архив
+	@rm ui_bundle.tar.gz
+	@echo "--- [REMOTE] Starting test instance on port $(TEST_PORT) ---"
+	ssh -i $(KEY_PATH) -p $(PORT) $(SSH_USER)@$(HOST) "chmod +x /tmp/$(TEST_BINARY_NAME) && \
+		cd /tmp && \
+		(export \$$(grep -v '^#' $(REMOTE_ENV_PATH) | xargs) && \
+		(API_PORT=$(TEST_PORT) nohup ./$(TEST_BINARY_NAME) > ./$(TEST_BINARY_NAME).log 2>&1 &) </dev/null) & sleep 1"
+	@echo "✔ Test instance is running. Use 'make tunnel-test' to see UI."
+
+# Прибиваем процесс и вычищаем мусор за собой, чтобы не оставлять на сервере временные файлы 
+# и не создавать конфликтов при повторных запусках
+stop-test: ## Остановить тест на сервере и УДАЛИТЬ все временные файлы (какашки)
+	@echo "--- [REMOTE] Stopping test instance and cleaning up /tmp ---"
+	ssh -i $(KEY_PATH) -p $(PORT) $(SSH_USER)@$(HOST) "pkill -x $(TEST_BINARY_NAME) || true; \
+		rm -f /tmp/$(TEST_BINARY_NAME) /tmp/$(TEST_BINARY_NAME).log"
+	@echo "✔ Remote /tmp is clean."
+
+tunnel-test: ## Прокинуть порт 4000 через SSH (безопасный доступ к тестам)
+	@echo "--- [NET] Mapping remote :$(TEST_PORT) to localhost:$(TEST_PORT) ---"
+	@echo "✔ UI available at: http://localhost:$(TEST_PORT)"
+	ssh -i $(KEY_PATH) -p $(PORT) -NL $(TEST_PORT):localhost:$(TEST_PORT) $(SSH_USER)@$(HOST)
+</file>
+
+<file path="internal/api/server.go">
+package api
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"errors"
+	"fmt"
+	"log/slog"
+	"math/big"
+	"net/http"
+	"path/filepath"
+	"strconv"
+	"time"
+
+	dbstore "github.com/ZeroD1vision/heimdallr-proxy/internal/db"
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+)
+
+// Интерфейсы определены здесь — API знает только то, что ему нужно.
+
+// StatsProvider — живая статистика из Xray.
+type StatsProvider interface {
+	GetUserStats(ctx context.Context, email string) (models.UserStats, error)
+}
+
+// HistoryProvider — исторические данные из БД.
+type HistoryProvider interface {
+	GetHistory(ctx context.Context, email string, limit int) ([]models.UserHistory, error)
+}
+
+// OTPStore — всё что серверу нужно от БД для работы с OTP.
+type OTPStore interface {
+	SaveOTP(ctx context.Context, otp *models.OTPCode) error
+	FindValidOTP(ctx context.Context, adminID int64, code string) (*models.OTPCode, error)
+	MarkOTPUsed(ctx context.Context, id uint) error
+}
+
+// Notifier — отправка уведомлений пользователю.
+// Реализуется ботом — сервер не знает про Telegram напрямую.
+type Notifier interface {
+	SendOTP(ctx context.Context, telegramID int64, code string) error
+}
+
+// UserStore — операции с пользователями в БД для admin API.
+type UserStore interface {
+	CreateUser(ctx context.Context, user *models.User) error
+	DeleteUser(ctx context.Context, email string) error
+	GetAllUsers(ctx context.Context) ([]models.User, error)
+	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
+	UpdateStatus(ctx context.Context, email string, isBlocked bool, expiresAt *time.Time) error
+	ResetTraffic(ctx context.Context, email string) error
+}
+
+// XrayUserManager — контракт управления пользователями в Xray.
+type XrayUserManager interface {
+	AddUser(ctx context.Context, user models.User) error
+	RemoveUser(ctx context.Context, inboundTag, email string) error
+}
+
+// PresenceProvider — read-only доступ к online/offline кэшу.
+// API использует этот интерфейс для обогащения списка пользователей.
+type PresenceProvider interface {
+	IsOnline(email string) bool
+}
+
+// --- Структура сервера ---
+type Server struct {
+	router          *echo.Echo
+	port            string
+	apiKey          string   // статичный токен для Postman/CI
+	jwtSecret       string   // секрет для подписи JWT выдаваемых после 2FA
+	adminEmail      string
+	adminTelegramID int64
+	statsProvider   StatsProvider
+	historyProvider HistoryProvider
+	userStore       UserStore
+	xrayUsers       XrayUserManager
+	presence        PresenceProvider
+	otpStore        OTPStore
+	notifier        Notifier
+	staticDir       string   // директория со статикой фронтенда
+}
+
+// NewServer принимает готовые зависимости. Никаких os.Getenv внутри пакета.
+func NewServer(
+	port, apiKey, jwtSecret, adminEmail string,
+	adminTelegramID int64,
+	statsProvider StatsProvider,
+	historyProvider HistoryProvider,
+	userStore UserStore,
+	xrayUsers XrayUserManager,
+	presence PresenceProvider,
+	otpStore OTPStore,
+	notifier Notifier,
+	staticDir string,
+) *Server {
+	e := echo.New()
+	e.HideBanner = true
+	e.Use(middleware.Recover())
+	e.Use(middleware.CORS())
+	e.Use(requestLogger())
+
+	return &Server{
+		router:          e,
+		port:            port,
+		apiKey:          apiKey,
+		jwtSecret:       jwtSecret,
+		adminEmail:      adminEmail,
+		adminTelegramID: adminTelegramID,
+		statsProvider:   statsProvider,
+		historyProvider: historyProvider,
+		userStore:       userStore,
+		xrayUsers:       xrayUsers,
+		presence:        presence,
+		otpStore:        otpStore,
+		notifier:        notifier,
+		staticDir:       staticDir,
+	}
+}
+
+func (s *Server) Start() error {
+	s.setupRoutes()
+	addr := fmt.Sprintf(":%s", s.port)
+	slog.Info("api server starting", "addr", addr)
+	return s.router.Start(addr)
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	slog.Info("api server shutting down")
+	return s.router.Shutdown(ctx)
+}
+
+func (s *Server) setupRoutes() {
+	auth := s.router.Group("/api/auth")
+	auth.POST("/request-otp", s.handleRequestOTP)
+	auth.POST("/verify-otp", s.handleVerifyOTP)
+
+	admin := s.router.Group("/api/admin", s.authMiddleware())
+	admin.POST("/users", s.handleAdminCreateUser)
+	admin.DELETE("/users/:email", s.handleAdminDeleteUser)
+	admin.GET("/users", s.handleAdminListUsers)
+	admin.PATCH("/users/:email/block", s.handleAdminBlockUser)
+	admin.PATCH("/users/:email/unblock", s.handleAdminUnblockUser)
+	admin.POST("/users/:email/reset-traffic", s.handleAdminResetTraffic)
+
+	g := s.router.Group("/api", s.authMiddleware())
+	g.GET("/stats", s.handleStats)
+	g.GET("/history", s.handleHistory)
+	s.router.Static("/", s.staticDir)
+	s.router.File("/", filepath.Join(s.staticDir, "index.html"))
+}
+
+// --- Auth handlers ---
+ 
+type requestOTPInput struct {
+	TelegramID int64 `json:"telegram_id"`
+}
+ 
+// POST /api/auth/request-otp
+// Генерирует OTP, сохраняет в БД и отправляет через Telegram бота.
+// Принимает: {"telegram_id": 123456}
+func (s *Server) handleRequestOTP(c echo.Context) error {
+	var input requestOTPInput
+	if err := c.Bind(&input); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	}
+	if input.TelegramID == 0 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "telegram_id is required"})
+	}
+ 
+	// Проверяем что запрос идёт от известного администратора.
+	// В будущем здесь будет поиск по БД для многопользовательского режима.
+	if input.TelegramID != s.adminTelegramID {
+		slog.Warn("otp requested for unknown telegram_id", "telegram_id", input.TelegramID, "remote_ip", c.RealIP())
+		// Отвечаем одинаково — не раскрываем существует ли пользователь (timing-safe по смыслу)
+		return c.JSON(http.StatusOK, map[string]string{"message": "if this account exists, a code has been sent"})
+	}
+ 
+	code, err := generateOTPCode()
+	if err != nil {
+		slog.Error("failed to generate otp code", "error", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
+	}
+ 
+	otp := &models.OTPCode{
+		AdminID:   input.TelegramID,
+		Code:      code,
+		ExpiresAt: time.Now().UTC().Add(5 * time.Minute),
+		Used:      false,
+	}
+ 
+	if err := s.otpStore.SaveOTP(c.Request().Context(), otp); err != nil {
+		slog.Error("failed to save otp", "error", err, "telegram_id", input.TelegramID)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
+	}
+ 
+	if err := s.notifier.SendOTP(c.Request().Context(), input.TelegramID, code); err != nil {
+		slog.Error("failed to send otp via telegram", "error", err, "telegram_id", input.TelegramID)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to send code"})
+	}
+ 
+	slog.Info("otp sent", "telegram_id", input.TelegramID)
+	return c.JSON(http.StatusOK, map[string]string{"message": "code sent to your Telegram"})
+}
+ 
+type verifyOTPInput struct {
+	TelegramID int64  `json:"telegram_id"`
+	Code       string `json:"code"`
+}
+ 
+// POST /api/auth/verify-otp
+// Проверяет OTP, возвращает JWT при успехе.
+// Принимает: {"telegram_id": 123456, "code": "847291"}
+// Возвращает: {"token": "eyJ..."}
+func (s *Server) handleVerifyOTP(c echo.Context) error {
+	var input verifyOTPInput
+	if err := c.Bind(&input); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	}
+	if input.TelegramID == 0 || input.Code == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "telegram_id and code are required"})
+	}
+ 
+	otp, err := s.otpStore.FindValidOTP(c.Request().Context(), input.TelegramID, input.Code)
+	if err != nil {
+		// Не различаем "не найден" и "истёк" — одинаковый ответ против брутфорса
+		slog.Warn("invalid or expired otp attempt", "telegram_id", input.TelegramID, "remote_ip", c.RealIP())
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid or expired code"})
+	}
+ 
+	if err := s.otpStore.MarkOTPUsed(c.Request().Context(), otp.ID); err != nil {
+		slog.Error("failed to mark otp as used", "error", err, "otp_id", otp.ID)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
+	}
+ 
+	token, err := s.generateJWT(input.TelegramID)
+	if err != nil {
+		slog.Error("failed to generate jwt", "error", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
+	}
+ 
+	slog.Info("otp verified, jwt issued", "telegram_id", input.TelegramID)
+	return c.JSON(http.StatusOK, map[string]string{"token": token})
+}
+
+type createUserInput struct {
+	Email        string     `json:"email"`
+	TelegramID   int64      `json:"telegram_id"`
+	InboundTag   string     `json:"inbound_tag"`
+	VlessFlow    string     `json:"vless_flow"`
+	TrafficLimit int64      `json:"traffic_limit"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+}
+
+func (input *createUserInput) validate() error {
+    if input.Email == "" {
+        return fmt.Errorf("email is required")
+    }
+    if input.TelegramID <= 0 {
+        return fmt.Errorf("telegram_id must be > 0")
+    }
+    if input.TrafficLimit < 0 {
+        return fmt.Errorf("traffic_limit must be >= 0")
+    }
+    if input.InboundTag == "" {
+        input.InboundTag = "inbound-main"
+    }
+    return nil
+}
+
+func isNotFoundError(err error) bool {
+	return errors.Is(err, dbstore.ErrNotFound)
+}
+
+// --- Middleware ---
+ 
+// authMiddleware принимает два типа токенов:
+// 1. Статичный API ключ (API_ADMIN_TOKEN) — для Postman и CI/CD
+// 2. JWT выданный после успешной верификации OTP — для демонстрации 2FA
+func (s *Server) authMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			authHeader := c.Request().Header.Get("Authorization")
+			if authHeader == "" {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			}
+ 
+			// Пробуем статичный ключ
+			if secureCompare(authHeader, "Bearer "+s.apiKey) {
+				return next(c)
+			}
+ 
+			// Пробуем JWT
+			const prefix = "Bearer "
+			if len(authHeader) > len(prefix) {
+				tokenStr := authHeader[len(prefix):]
+				if err := s.validateJWT(tokenStr); err == nil {
+					return next(c)
+				}
+			}
+ 
+			slog.Warn("unauthorized api access",
+				"remote_ip", c.RealIP(),
+				"path", c.Request().URL.Path,
+			)
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		}
+	}
+}
+
+// requestLogger логирует входящие запросы через slog.
+func requestLogger() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			start := time.Now()
+			err := next(c)
+			slog.Info("http request",
+				"method",     c.Request().Method,
+				"path",       c.Request().URL.Path,
+				"status",     c.Response().Status,
+				"latency_ms", time.Since(start).Milliseconds(),
+				"remote_ip",  c.RealIP(),
+			)
+			return err
+		}
+	}
+}
+
+// --- JWT helpers ---
+ 
+type jwtClaims struct {
+	TelegramID int64 `json:"telegram_id"`
+	jwt.RegisteredClaims
+}
+ 
+func (s *Server) generateJWT(telegramID int64) (string, error) {
+	claims := jwtClaims{
+		TelegramID: telegramID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(s.jwtSecret))
+}
+ 
+func (s *Server) validateJWT(tokenStr string) error {
+	token, err := jwt.ParseWithClaims(tokenStr, &jwtClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return []byte(s.jwtSecret), nil
+	})
+	if err != nil {
+		return err
+	}
+	if !token.Valid {
+		return fmt.Errorf("token is not valid")
+	}
+	return nil
+}
+
+// --- API handlers ---
+
+// GET /api/stats — статистика в текущий момент
+func (s *Server) handleStats(c echo.Context) error {
+	stats, err := s.statsProvider.GetUserStats(c.Request().Context(), s.adminEmail)
+	if err != nil {
+		slog.Error("api: failed to get stats", "error", err, "remote_ip", c.RealIP())
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
+	}
+	return c.JSON(http.StatusOK, stats)
+}
+
+// GET /api/history?limit=100 — история из БД
+func (s *Server) handleHistory(c echo.Context) error {
+	limit := 100
+	if l := c.QueryParam("limit"); l != "" {
+		parsed, err := strconv.Atoi(l)
+		if err != nil || parsed <= 0 || parsed > 1000 {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": "limit must be between 1 and 1000",
+			})
+		}
+		limit = parsed
+	}
+
+	history, err := s.historyProvider.GetHistory(c.Request().Context(), s.adminEmail, limit)
+	if err != nil {
+		slog.Error("api: failed to get history", "error", err, "remote_ip", c.RealIP())
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
+	}
+	return c.JSON(http.StatusOK, history)
+}
+
+// --- Users handlers ---
+
+// Структура списка пользователей и статусом (Online/Offline)
+type adminUserView struct {
+	models.User
+	Status string `json:"status"` // blocked | online | offline
+}
+
+// POST /api/admin/users — создание нового пользователя
+func (s *Server) handleAdminCreateUser(c echo.Context) error {
+	var input createUserInput
+	if err := c.Bind(&input); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	}
+	if err := input.validate(); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	user := models.User{
+		Email:        input.Email,
+		TelegramID:   input.TelegramID,
+		InboundTag:   input.InboundTag,
+		VlessFlow:    input.VlessFlow,
+		TrafficLimit: input.TrafficLimit,
+		ExpiresAt:    input.ExpiresAt,
+        IsBlocked:    false,
+	}
+
+	ctx := c.Request().Context()
+	if err := s.userStore.CreateUser(ctx, &user); err != nil {
+		slog.Error("admin create user: db error", "email", user.Email, "error", err)
+		return c.JSON(http.StatusConflict, map[string]string{"error": "failed to create user in db"})
+	}
+
+	if err := s.xrayUsers.AddUser(ctx, user); err != nil {
+		// Откатываем создание в БД при ошибке Xray API
+		_ = s.userStore.DeleteUser(ctx, user.Email)
+		slog.Error("admin create user: xray error, rollback done", "email", user.Email, "error", err)
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "failed to add user to xray"})
+	}
+
+	return c.JSON(http.StatusCreated, user)
+}
+
+// DELETE /api/admin/users/:email — удаление пользователя
+func (s *Server) handleAdminDeleteUser(c echo.Context) error {
+	email := c.Param("email")
+	if email == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "email is required"})
+	}
+
+	ctx := c.Request().Context()
+	user, err := s.userStore.GetUserByEmail(ctx, email)
+	if err != nil {
+		if isNotFoundError(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "user not found"})
+		}
+		slog.Error("admin delete user: fetch failed", "email", email, "error", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db fetch failed"})
+	}
+
+	if err := s.userStore.DeleteUser(ctx, email); err != nil {
+		if isNotFoundError(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "user not found"})
+		}
+		slog.Error("admin delete user: db delete failed", "email", email, "error", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db delete failed"})
+	}
+
+	if err := s.xrayUsers.RemoveUser(ctx, user.InboundTag, user.Email); err != nil {
+		if user.IsBlocked {
+			// Если пользователь уже заблокирован, значит его нет в Xray — игнорируем ошибку удаления.
+			slog.Warn("admin delete user: xray remove failed but user is already blocked, ignoring", "email", email, "error", err)
+			return c.NoContent(http.StatusNoContent)
+		}
+		// Ошибка удаления из Xray для активного пользователя — критическая, нужно логировать и компенсировать.
+		_ = s.userStore.CreateUser(ctx, user) // компенсация
+		slog.Error("admin delete user: xray error, rollback done", "email", email, "error", err)
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "xray remove user failed"})
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// GET /api/admin/users — список всех пользователей
+func (s *Server) handleAdminListUsers(c echo.Context) error {
+	users, err := s.userStore.GetAllUsers(c.Request().Context())
+	if err != nil {
+		slog.Error("admin list users: fetch failed", "error", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to fetch users"})
+	}
+
+	out := make([]adminUserView, 0, len(users))
+	for _, u := range users {
+		status := "offline"
+		if u.IsBlocked {
+			status = "blocked"
+		} else if s.presence != nil && s.presence.IsOnline(u.Email) {
+			status = "online"
+		}
+		out = append(out, adminUserView{User: u, Status: status})
+	}
+
+	return c.JSON(http.StatusOK, out)
+}
+
+// PATCH /api/admin/users/:email/block — принудительная блокировка пользователя.
+func (s *Server) handleAdminBlockUser(c echo.Context) error {
+	email := c.Param("email")
+	if email == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "email is required"})
+	}
+
+	ctx := c.Request().Context()
+	user, err := s.userStore.GetUserByEmail(ctx, email)
+	if err != nil {
+		if isNotFoundError(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "user not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db fetch failed"})
+	}
+
+	if err := s.xrayUsers.RemoveUser(ctx, user.InboundTag, user.Email); err != nil {
+		slog.Error("admin block user: xray remove failed", "email", user.Email, "error", err)
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "xray remove user failed"})
+	}
+
+	if err := s.userStore.UpdateStatus(ctx, user.Email, true, user.ExpiresAt); err != nil {
+		_ = s.xrayUsers.AddUser(ctx, *user) // компенсация
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db status update failed"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "blocked"})
+}
+
+// PATCH /api/admin/users/:email/unblock — разблокировка и возврат в Xray inbound.
+func (s *Server) handleAdminUnblockUser(c echo.Context) error {
+	email := c.Param("email")
+	if email == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "email is required"})
+	}
+
+	ctx := c.Request().Context()
+	user, err := s.userStore.GetUserByEmail(ctx, email)
+	if err != nil {
+		if isNotFoundError(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "user not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db fetch failed"})
+	}
+
+	if err := s.xrayUsers.AddUser(ctx, *user); err != nil {
+		slog.Error("admin unblock user: xray add failed", "email", user.Email, "error", err)
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "xray add user failed"})
+	}
+
+	if err := s.userStore.UpdateStatus(ctx, user.Email, false, nil); err != nil {
+		_ = s.xrayUsers.RemoveUser(ctx, user.InboundTag, user.Email) // компенсация
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "db status update failed"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "active"})
+}
+
+// POST /api/admin/users/:email/reset-traffic — сброс лимита трафика пользователя.
+func (s *Server) handleAdminResetTraffic(c echo.Context) error {
+	email := c.Param("email")
+	if email == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "email is required"})
+	}
+
+	if err := s.userStore.ResetTraffic(c.Request().Context(), email); err != nil {
+		if isNotFoundError(err) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "user not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to reset traffic"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"status": "traffic_reset"})
+}
+
+
+// --- Helpers ---
+ 
+// generateOTPCode генерирует криптографически безопасный 6-значный код.
+// crypto/rand вместо math/rand — нельзя предсказать следующий код.
+func generateOTPCode() (string, error) {
+	const digits = 6
+	max := new(big.Int).Exp(big.NewInt(10), big.NewInt(digits), nil) // 10^6 = 1000000
+	n, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return "", fmt.Errorf("generate random otp: %w", err)
+	}
+	// Форматируем с ведущими нулями: 000001, 047391 и т.д.
+	return fmt.Sprintf("%06d", n.Int64()), nil
+}
+ 
+func secureCompare(given, expected string) bool {
+	g, e := []byte(given), []byte(expected)
+	if subtle.ConstantTimeEq(int32(len(g)), int32(len(e))) == 0 {
+		return false
+	}
+	return subtle.ConstantTimeCompare(g, e) == 1
+}
+</file>
+
+<file path="cmd/heimdallr/main.go">
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/signal"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/api"
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/bot"
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/collector"
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/db"
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/xray"
+)
+
+func main() {
+	// -------------------------------------------------------------------------
+	// 1. Логирование — JSON для systemd/journald
+	// -------------------------------------------------------------------------
+	// Список ключей, которые нельзя выводить в логи
+	sensitiveKeys := map[string]bool{
+		"tg_bot_token":    true,
+		"api_admin_token": true,
+		"jwt_secret":      true,
+		"password":        true,
+		"token":           true,
+		"code":            true, // для OTP
+	}
+
+	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			// Приводим ключ к нижнему регистру и проверяем
+			if sensitiveKeys[strings.ToLower(a.Key)] {
+				return slog.String(a.Key, "[REDACTED]")
+			}
+			return a
+		},
+	})
+	slog.SetDefault(slog.New(handler))
+	slog.Info("heimdallr-proxy starting", "version", "0.3.0")
+
+	// -------------------------------------------------------------------------
+	// 2. Конфигурация — весь os.Getenv только здесь
+	// -------------------------------------------------------------------------
+	cfg := loadConfig()
+
+	// -------------------------------------------------------------------------
+	// 3. База данных
+	// -------------------------------------------------------------------------
+	store, err := db.NewStore(cfg.dbPath)
+	if err != nil {
+		slog.Error("failed to initialize database", "path", cfg.dbPath, "error", err)
+		os.Exit(1)
+	}
+	slog.Info("database initialized", "path", cfg.dbPath)
+
+	// Чистим просроченные OTP при старте — не накапливаем мусор
+	if err := store.DeleteExpiredOTPs(context.Background()); err != nil {
+		slog.Warn("failed to clean expired otps on startup", "error", err)
+	}
+
+	// -------------------------------------------------------------------------
+	// 4. Xray gRPC клиент
+	// -------------------------------------------------------------------------
+	xrayClient, initErr := xray.NewClient(cfg.xrayAddr)
+	if initErr != nil {
+		// Не fatal — переподключится при первом вызове
+		slog.Warn("xray initial dial failed, will retry on first request",
+			"addr", cfg.xrayAddr,
+			"error", initErr,
+		)
+	} else {
+		slog.Info("xray client initialized", "addr", cfg.xrayAddr)
+	}
+
+	// Проверка соединения при старте (информационная, не fatal)
+	checkCtx, checkCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if _, err := xrayClient.GetUserStats(checkCtx, cfg.adminEmail); err != nil {
+		slog.Warn("xray connectivity check failed", "error", err)
+	} else {
+		slog.Info("xray connectivity check passed")
+	}
+	checkCancel()
+
+	// -------------------------------------------------------------------------
+	// 5. Telegram бот
+	// -------------------------------------------------------------------------
+	// xrayClient реализует bot.StatsProvider — есть метод GetUserStats.
+	tgBot, err := bot.NewBot(xrayClient, cfg.adminEmail)
+	if err != nil {
+		slog.Error("failed to initialize telegram bot", "error", err)
+		os.Exit(1)
+	}
+
+	// -------------------------------------------------------------------------
+	// 6. Воркеры — Pipeline для асинхронной обработки пользователей
+	// -------------------------------------------------------------------------
+	// Presence cache — общий in-memory источник online/offline статусов.
+	presence := collector.NewPresenceCache()
+
+	// Bouncer реализует логику работы с пользователями в Xray (DB + в будущем Xray)
+	bouncer := collector.NewBouncer(store, xrayClient, tgBot)
+	// Pipeline управляет очередью задач и многопоточным выполнением
+	enforcePipeline := collector.NewPipeline(bouncer, 3) // 3 воркера
+
+	// -------------------------------------------------------------------------
+	// 7. Коллектор — фоновый сбор статистики в БД
+	// -------------------------------------------------------------------------
+	statsCollector := collector.NewCollector(store, xrayClient, presence, enforcePipeline, cfg.collectInterval)
+
+	collectorCtx, collectorCancel := context.WithCancel(context.Background())
+	defer collectorCancel()
+
+	// -------------------------------------------------------------------------
+	// 8. API сервер
+	// -------------------------------------------------------------------------
+	// tgBot реализует api.Notifier (метод SendOTP)
+	// store реализует api.OTPStore и api.HistoryProvider
+	// xrayClient реализует api.StatsProvider
+	apiServer := api.NewServer(
+		cfg.apiPort,
+		cfg.apiKey,
+		cfg.jwtSecret,
+		cfg.adminEmail,
+		cfg.adminTelegramID,
+		xrayClient,
+		store,
+		store,
+		xrayClient,
+		presence,
+		store,
+		tgBot,
+		cfg.staticDir,
+	)
+
+	// -------------------------------------------------------------------------
+	// 9. Запуск
+	// -------------------------------------------------------------------------
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		if err := apiServer.Start(); err != nil {
+			slog.Error("api server stopped unexpectedly", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Запуск Pipeline (воркеров блокировки)
+	enforcePipeline.Run(collectorCtx)
+
+	go statsCollector.Run(collectorCtx)
+
+	go tgBot.Start()
+
+	slog.Info("heimdallr-proxy running",
+		"api_port", cfg.apiPort,
+		"xray_addr", cfg.xrayAddr,
+		"admin_email", cfg.adminEmail,
+		"collect_interval", cfg.collectInterval,
+	)
+	fmt.Println("✔ heimdallr-proxy is running")
+
+	// -------------------------------------------------------------------------
+	// 9. Graceful shutdown — в обратном порядке запуска
+	// -------------------------------------------------------------------------
+	<-stop
+	slog.Info("shutdown signal received")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	collectorCancel() // 1. Коллектор — перестаём писать в БД
+
+	tgBot.Api.Stop() // 2. Бот
+
+	if err := apiServer.Shutdown(shutdownCtx); err != nil { // 3. API
+		slog.Error("api server shutdown error", "error", err)
+	}
+
+	if err := xrayClient.Close(); err != nil { // 4. gRPC
+		slog.Error("xray client close error", "error", err)
+	}
+
+	slog.Info("heimdallr-proxy stopped")
+}
+
+type config struct {
+	dbPath          string
+	xrayAddr        string
+	apiPort         string
+	uiPort          string
+	apiKey          string
+	jwtSecret       string
+	adminEmail      string
+	adminTelegramID int64
+	collectInterval time.Duration
+	staticDir       string
+}
+
+func loadConfig() config {
+	adminIDStr := getEnv("TG_ADMIN_ID", "0")
+	adminTelegramID, err := strconv.ParseInt(adminIDStr, 10, 64)
+	if err != nil {
+		slog.Warn("invalid TG_ADMIN_ID, using 0", "value", adminIDStr)
+		adminTelegramID = 0
+	}
+	cfg := config{
+		dbPath:          getEnv("DB_PATH", "data/heimdallr.db"),
+		xrayAddr:        getEnv("XRAY_API_ADDR", "localhost:10085"),
+		apiPort:         getEnv("API_PORT", "3000"),
+		uiPort:          getEnv("UI_PORT", "3001"),
+		apiKey:          os.Getenv("API_ADMIN_TOKEN"),
+		jwtSecret:       os.Getenv("JWT_SECRET"),
+		adminEmail:      getEnv("ADMIN_EMAIL", "zd_pc"),
+		adminTelegramID: adminTelegramID,
+		collectInterval: parseDuration("COLLECT_INTERVAL", 30*time.Second),
+		staticDir:       getEnv("STATIC_DIR", "out"),
+	}
+
+	if cfg.apiKey == "" {
+		slog.Error("API_ADMIN_TOKEN is not set")
+		os.Exit(1)
+	}
+
+	if cfg.jwtSecret == "" {
+		slog.Error("JWT_SECRET is not set")
+		os.Exit(1)
+	}
+
+	return cfg
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	slog.Warn("env not set, using default", "key", key, "default", fallback)
+	return fallback
+}
+
+// parseDuration читает интервал из env в формате Go duration ("5s", "1m30s", "2m").
+// Если переменная не задана или невалидна — возвращает fallback.
+func parseDuration(key string, fallback time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		slog.Warn("invalid duration in env, using default",
+			"key", key,
+			"value", v,
+			"default", fallback,
+		)
+		return fallback
+	}
+	return d
+}
+</file>
+
+</files>
