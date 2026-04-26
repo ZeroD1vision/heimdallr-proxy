@@ -24,6 +24,7 @@ const config: Config = {
       },
       backdropBlur: {
         glass: '24px',
+        'refraction-glass': '32px',
       },
       animation: {
         'fade-in':    'fadeIn 0.6s ease forwards',

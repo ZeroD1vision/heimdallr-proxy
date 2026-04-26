@@ -1,118 +1,50 @@
-/* globals.css — Heimdallr unified design system */
+/* globals.css — Heimdallr design system */
 
-/* Tailwind @layer base tokens */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-*,*::before,*::after { margin:0; padding:0; box-sizing:border-box }
+/* ─── Reset ─────────────────────────────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* ─── Tokens ─────────────────────────────────────────────────────────────── */
 :root {
-  --accent:  #00ff88;
-  --danger:  #ff3b5c;
-  --blue:    #38bdf8;
-  --void:    #000000;
-  --glass:   rgba(255,255,255,0.03);
-  --border:  rgba(255,255,255,0.08);
-  --muted:   rgba(255,255,255,0.35);
-  --oled-black: #000000;
+  --accent:       #00ff88;
+  --danger:       #ff3b5c;
+  --blue:         #38bdf8;
+  --void:         #000000;
+  --glass:        rgba(255, 255, 255, 0.03);
+  --glass-bg:     rgba(255, 255, 255, 0.02);
+  --border:       rgba(255, 255, 255, 0.08);
   --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-bg: rgba(255, 255, 255, 0.02);
-  --chromatic-red: rgba(255, 0, 0, 0.5);
-  --chromatic-blue: rgba(0, 255, 255, 0.5);
+  --muted:        rgba(255, 255, 255, 0.35);
 }
 
-.glass-card {
-  @apply rounded-2xl border border-white/10;
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(150%);
-  -webkit-backdrop-filter: blur(20px) saturate(150%);
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
-  isolation: isolate;
-  transform: translateZ(0); 
+/* ─── Base ───────────────────────────────────────────────────────────────── */
+html {
+  background: var(--void);
+  color-scheme: dark;
+  scroll-behavior: auto;
 }
 
+body {
+  background: var(--void);
+  color: #fff;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Typography ─────────────────────────────────────────────────────────── */
 @layer base {
   .font-syne {
     font-family: var(--font-syne), sans-serif;
-    /* Улучшаем отрисовку тонких и жирных линий */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
-  
+
   .font-mono {
     font-family: var(--font-geist-mono), monospace;
-  }
-}
-
-html { background: var(--void); color-scheme: dark; scroll-behavior: auto }
-body { background: var(--void); color: #fff; overflow-x: hidden; -webkit-font-smoothing: antialiased }
-
-::-webkit-scrollbar-track { background: transparent }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px }
-::selection { background: rgba(0,255,136,.15) }
-::-webkit-scrollbar {
-  display: none;
-}
-* {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-/* Video layer base class */
-.vl {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  will-change: opacity;
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* ── Animations ── */
-@keyframes fadeIn  { from{opacity:0} to{opacity:1} }
-@keyframes slideUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
-@keyframes scan    { from{transform:translateY(-100%)} to{transform:translateY(400%)} }
-@keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:.4} }
-
-@keyframes dotPulse {
-  0%,100% { opacity:1; box-shadow:0 0 7px var(--accent) }
-  50%     { opacity:.5; box-shadow:0 0 18px var(--accent), 0 0 36px rgba(0,255,136,.2) }
-}
-@keyframes scrollLine {
-  0%   { transform:scaleY(0); transform-origin:top; opacity:0 }
-  50%  { transform:scaleY(1); transform-origin:top; opacity:1 }
-  100% { transform:scaleY(0); transform-origin:bottom; opacity:0 }
-}
-
-/* Utility: glass panel */
-.glass {
-  background: var(--glass);
-  border: 1px solid var(--border);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-radius: 8px;
-}
-
-@keyframes chevronPulse {
-  0%   { opacity: 0;    transform: translateY(-4px) }
-  30%  { opacity: 0.55; transform: translateY(0px)  }
-  60%  { opacity: 0.2;  transform: translateY(3px)  }
-  100% { opacity: 0;    transform: translateY(6px)  }
-}
-
-@keyframes chevronFloat {
-  0%,100% {
-    opacity: 0.2;
-    transform: translateY(0px) scale(1);
-    stroke-opacity: 0.3;
-  }
-  50% {
-    opacity: 0.8;
-    transform: translateY(5px) scale(1.2);
-    stroke-opacity: 0.7;
   }
 }
 
@@ -122,9 +54,114 @@ body { background: var(--void); color: #fff; overflow-x: hidden; -webkit-font-sm
     text-transform: uppercase;
     -webkit-font-smoothing: antialiased;
   }
-  
+
   .font-mono-fixed {
     font-family: var(--font-geist-mono), monospace !important;
     text-transform: uppercase;
   }
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+* { -ms-overflow-style: none; scrollbar-width: none; }
+::-webkit-scrollbar { display: none; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
+::selection { background: rgba(0, 255, 136, 0.15); }
+
+/* ─── Glass primitives ───────────────────────────────────────────────────── */
+
+/* Базовый glass-card — для поповеров и карточек */
+.glass-card {
+  @apply rounded-2xl border border-white/10;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+/* Утилитарный glass — для мелких элементов */
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 8px;
+}
+
+/* Дисперсионный слой GlassPane — хроматическая аберрация */
+.glass-pane__dispersion {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  mask-image: radial-gradient(circle at center, black 60%, transparent 100%);
+}
+
+.glass-pane__dispersion::before,
+.glass-pane__dispersion::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  mix-blend-mode: screen;
+  opacity: 0.6;
+  transition: transform 0.3s ease-out;
+  filter: blur(1px); /* Мягкое размытие спектра */
+}
+
+.glass-pane__dispersion::before {
+  /* Смещаем центр градиента за пределы видимости или делаем центр прозрачным */
+  background: radial-gradient(circle at 0% 50%, rgba(255, 0, 0, 0.2), transparent 40%);
+}
+
+.glass-pane__dispersion::after {
+  background: radial-gradient(circle at 100% 50%, rgba(0, 255, 255, 0.2), transparent 40%);
+}
+
+.glass-pane-refraction {
+  /* Тонкая рамка, которая "собирает" свет на ребрах */
+  box-shadow: 
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 2px 10px rgba(255, 255, 255, 0.05);
+  /* Этот фильтр заставит края быть чуть более "стеклянными" */
+  pointer-events: none;
+}
+
+/* ─── Video layer ────────────────────────────────────────────────────────── */
+.vl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  will-change: opacity;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ─── Animations ─────────────────────────────────────────────────────────── */
+@keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes scan    { from { transform: translateY(-100%); } to { transform: translateY(400%); } }
+@keyframes pulse   { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 7px var(--accent); }
+  50%      { opacity: 0.5; box-shadow: 0 0 18px var(--accent), 0 0 36px rgba(0, 255, 136, 0.2); }
+}
+
+@keyframes scrollLine {
+  0%   { transform: scaleY(0); transform-origin: top; opacity: 0; }
+  50%  { transform: scaleY(1); transform-origin: top; opacity: 1; }
+  100% { transform: scaleY(0); transform-origin: bottom; opacity: 0; }
+}
+
+@keyframes chevronFloat {
+  0%, 100% { opacity: 0.2; transform: translateY(0px) scale(1); }
+  50%      { opacity: 0.8; transform: translateY(5px) scale(1.2); }
 }
