@@ -43,7 +43,6 @@ func main() {
 	})
 	slog.SetDefault(slog.New(handler))
 	slog.Info("heimdallr-proxy starting", "version", "0.3.0")
-
 	// -------------------------------------------------------------------------
 	// 2. Конфигурация — весь os.Getenv только здесь
 	// -------------------------------------------------------------------------
@@ -91,7 +90,7 @@ func main() {
 	// 5. Telegram бот
 	// -------------------------------------------------------------------------
 	// xrayClient реализует bot.StatsProvider — есть метод GetUserStats.
-	tgBot, err := bot.NewBot(xrayClient, cfg.adminEmail)
+	tgBot, err := bot.NewBot(xrayClient, store, store, cfg.adminEmail)
 	if err != nil {
 		slog.Error("failed to initialize telegram bot", "error", err)
 		os.Exit(1)
@@ -127,15 +126,16 @@ func main() {
 		cfg.apiKey,
 		cfg.jwtSecret,
 		cfg.adminEmail,
-		cfg.adminTelegramID,
-		xrayClient,
-		store,
-		store,
-		xrayClient,
-		presence,
-		store,
-		tgBot,
-		cfg.staticDir,
+		xrayClient,  // StatsProvider
+	    store,       // HistoryProvider
+	    store,       // UserStore
+		store,      // реализует WebUserStore, AuthSessionStore и т.д.
+	    xrayClient,  // XrayUserManager
+	    presence,    // PresenceProvider
+	    store,       // OTPStore
+	    store,       // SessionStore
+	    tgBot,       // Notifier
+	    cfg.staticDir,
 	)
 
 	// -------------------------------------------------------------------------
@@ -155,6 +155,21 @@ func main() {
 	enforcePipeline.Run(collectorCtx)
 
 	go statsCollector.Run(collectorCtx)
+
+	go func() {
+	    ticker := time.NewTicker(5 * time.Minute)
+	    defer ticker.Stop()
+	    for {
+	        select {
+	        case <-ticker.C:
+	            if err := store.DeleteExpiredSessions(context.Background()); err != nil {
+	                slog.Warn("failed to clean expired sessions", "error", err)
+	            }
+	        case <-collectorCtx.Done():
+	            return
+	        }
+	    }
+	}()
 
 	go tgBot.Start()
 
