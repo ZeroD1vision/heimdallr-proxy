@@ -1,0 +1,6 @@
+node_modules
+dist
+build
+data/*.db
+*.xml
+.next

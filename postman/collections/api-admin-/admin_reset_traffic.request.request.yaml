@@ -1,6 +1,6 @@
 $kind: http-request
 name: admin_reset_traffic.request
-url: "{{base_url}}:{{port}}/api/admin/users/test-user@heimdallr.local/reset-traffic"
+url: '{{base_url}}:{{port}}/api/admin/users/test-user@heimdallr.local/reset-traffic'
 method: POST
 auth:
   credentials:

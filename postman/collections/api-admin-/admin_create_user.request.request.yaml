@@ -1,6 +1,6 @@
 $kind: http-request
 name: admin_create_user.request
-url: "{{base_url}}:{{port}}/api/admin/users"
+url: '{{base_url}}:{{port}}/api/admin/users'
 method: POST
 body:
   type: json

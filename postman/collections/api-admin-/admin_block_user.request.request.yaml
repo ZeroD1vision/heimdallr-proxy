@@ -1,6 +1,6 @@
 $kind: http-request
 name: admin_block_user.request
-url: "{{base_url}}:{{port}}/api/admin/users/test-user@heimdallr.local/block"
+url: '{{base_url}}:{{port}}/api/admin/users/test-user@heimdallr.local/block'
 method: PATCH
 auth:
   credentials:

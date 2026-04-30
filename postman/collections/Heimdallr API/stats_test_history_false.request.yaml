@@ -5,7 +5,7 @@ method: GET
 headers:
   Connection: close
 queryParams:
-  limit: "9999"
+  limit: '9999'
 auth:
   credentials:
     id: 93b072ae-6908-4bab-83b7-10569c1cbde7

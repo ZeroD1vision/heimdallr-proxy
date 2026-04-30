@@ -1,12 +1,12 @@
-import type { NextConfig } from 'next'
+import type { NextConfig } from 'next';
 
-const isDev = process.env.NODE_ENV === 'development'
+const isDev = process.env.NODE_ENV === 'development';
 
 const nextConfig: NextConfig = {
-  output: 'export',       // next build → /out — Go Echo раздаёт статику
-  trailingSlash: true,    // совместимость с file-based routing на статике
+  output: 'export', // next build → /out — Go Echo раздаёт статику
+  trailingSlash: true, // совместимость с file-based routing на статике
   images: {
-    unoptimized: true,    // next/image без Node.js runtime
+    unoptimized: true, // next/image без Node.js runtime
   },
   allowedDevOrigins: ['172.17.243.117'],
   // В dev-режиме проксируем /api/* на Go (порт 3000)
@@ -15,12 +15,12 @@ const nextConfig: NextConfig = {
     async rewrites() {
       return [
         {
-          source:      '/api/:path*',
+          source: '/api/:path*',
           destination: 'http://localhost:3000/api/:path*',
         },
-      ]
+      ];
     },
   }),
-}
+};
 
-export default nextConfig
+export default nextConfig;
