@@ -27,8 +27,8 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_DEPLOY_USER_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: "heimdallr-test"
-          target: "~/" # Кидаем в домашнюю папку юзера
+          source: 'heimdallr-test'
+          target: '~/' # Кидаем в домашнюю папку юзера
 
       - name: Execute Test on Server via SSH
         uses: appleboy/ssh-action@master

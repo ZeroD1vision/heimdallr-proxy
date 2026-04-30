@@ -1,6 +1,6 @@
 $kind: http-request
 name: 2fa_test_confirm
-url: "{{base_url}}:{{port}}/api/auth/verify-otp"
+url: '{{base_url}}:{{port}}/api/auth/verify-otp'
 method: POST
 headers:
   Connection: close

@@ -1,4 +1,4 @@
-name: "Deploy: Heimdallr Service"
+name: 'Deploy: Heimdallr Service'
 
 on:
   workflow_dispatch:
@@ -11,41 +11,41 @@ permissions:
 
 jobs:
   build-and-delivery:
-    name: "Build & Artifact Delivery"
+    name: 'Build & Artifact Delivery'
     runs-on: ubuntu-latest
 
     steps:
-      - name: "Source: Checkout Repository"
+      - name: 'Source: Checkout Repository'
         uses: actions/checkout@v4
 
-      - name: "Setup: Initialize Go Environment"
+      - name: 'Setup: Initialize Go Environment'
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
           cache: true
-        
-      - name: "Build: Compile Static Binary"
+
+      - name: 'Build: Compile Static Binary'
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
           go build -v -ldflags="-s -w" -o heimdallr ./cmd/heimdallr
           # Did the best i could to reduce the binary size
-      - name: "Deploy: Transfer Binary to Server"
+      - name: 'Deploy: Transfer Binary to Server'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_DEPLOY_USER_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: "heimdallr"
-          target: "/var/www/heimdallr"
-      
+          source: 'heimdallr'
+          target: '/var/www/heimdallr'
+
   service-orchestration:
-    name: "Service Management"
+    name: 'Service Management'
     runs-on: ubuntu-latest
     needs: build-and-delivery
 
     steps:
-      - name: "Systemd: Restart Heimdalr Service"
+      - name: 'Systemd: Restart Heimdalr Service'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -54,8 +54,8 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           script: |
             sudo systemctl restart heimdallr.service
-      
-      - name: "Healthcheck: Verify Service Status"
+
+      - name: 'Healthcheck: Verify Service Status'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -64,5 +64,3 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           script: |
             sudo systemctl is-active --quiet heimdallr.service || exit 1
-
-      

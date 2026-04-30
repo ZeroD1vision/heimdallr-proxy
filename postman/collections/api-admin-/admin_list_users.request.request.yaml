@@ -1,6 +1,6 @@
 $kind: http-request
 name: admin_list_users.request
-url: "{{base_url}}:{{port}}/api/admin/users"
+url: '{{base_url}}:{{port}}/api/admin/users'
 method: GET
 auth:
   credentials:

@@ -5,7 +5,7 @@ method: GET
 headers:
   Connection: close
 queryParams:
-  limit: "10"
+  limit: '10'
 auth:
   type: inherit
   credentials:

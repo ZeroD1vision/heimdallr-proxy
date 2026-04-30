@@ -1,6 +1,6 @@
 $kind: http-request
 name: admin_delete_user.request
-url: "{{base_url}}:{{port}}/api/admin/users/test-user@heimdallr.local"
+url: '{{base_url}}:{{port}}/api/admin/users/test-user@heimdallr.local'
 method: DELETE
 auth:
   credentials:
