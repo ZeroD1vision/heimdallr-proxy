@@ -16,8 +16,10 @@ import (
 	dbstore "github.com/ZeroD1vision/heimdallr-proxy/internal/db"
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Интерфейсы определены здесь — API знает только то, что ему нужно.
@@ -37,6 +39,22 @@ type OTPStore interface {
 	SaveOTP(ctx context.Context, otp *models.OTPCode) error
 	FindValidOTP(ctx context.Context, adminID int64, code string) (*models.OTPCode, error)
 	MarkOTPUsed(ctx context.Context, id uint) error
+}
+
+// WebUserStore — контракт для работы с веб-аккаунтами.
+type WebUserStore interface {
+	CreateWebUser(ctx context.Context, u *models.WebUser) error
+	GetWebUserByEmail(ctx context.Context, email string) (*models.WebUser, error)
+	GetWebUserByID(ctx context.Context, id uint) (*models.WebUser, error)
+	UpdateWebUserLogin(ctx context.Context, userID uint, ip string) error
+}
+ 
+// SessionStore — контракт для работы с auth-сессиями.
+type SessionStore interface {
+	SaveSession(ctx context.Context, session *models.AuthSession) error
+	FindValidSession(ctx context.Context, sessionID string) (*models.AuthSession, error)
+	UpdateSessionStatus(ctx context.Context, sessionID string, status models.SessionStatus) error
+	DeleteExpiredSessions(ctx context.Context) error
 }
 
 // Notifier — отправка уведомлений пользователю.
@@ -78,9 +96,11 @@ type Server struct {
 	statsProvider   StatsProvider
 	historyProvider HistoryProvider
 	userStore       UserStore
+	webUserStore    WebUserStore  // веб-аккаунты
 	xrayUsers       XrayUserManager
 	presence        PresenceProvider
 	otpStore        OTPStore
+	sessionStore    SessionStore  // auth-сессии
 	notifier        Notifier
 	staticDir       string   // директория со статикой фронтенда
 }
@@ -88,13 +108,14 @@ type Server struct {
 // NewServer принимает готовые зависимости. Никаких os.Getenv внутри пакета.
 func NewServer(
 	port, apiKey, jwtSecret, adminEmail string,
-	adminTelegramID int64,
 	statsProvider StatsProvider,
 	historyProvider HistoryProvider,
 	userStore UserStore,
+	webUserStore WebUserStore,
 	xrayUsers XrayUserManager,
 	presence PresenceProvider,
 	otpStore OTPStore,
+	sessionStore SessionStore,
 	notifier Notifier,
 	staticDir string,
 ) *Server {
@@ -110,13 +131,14 @@ func NewServer(
 		apiKey:          apiKey,
 		jwtSecret:       jwtSecret,
 		adminEmail:      adminEmail,
-		adminTelegramID: adminTelegramID,
 		statsProvider:   statsProvider,
 		historyProvider: historyProvider,
 		userStore:       userStore,
+		webUserStore:    webUserStore,
 		xrayUsers:       xrayUsers,
 		presence:        presence,
 		otpStore:        otpStore,
+		sessionStore:    sessionStore,
 		notifier:        notifier,
 		staticDir:       staticDir,
 	}
@@ -135,10 +157,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 func (s *Server) setupRoutes() {
+	// ── Auth — публичные эндпоинты ────────────────────────────────────────────
 	auth := s.router.Group("/api/auth")
-	auth.POST("/request-otp", s.handleRequestOTP)
-	auth.POST("/verify-otp", s.handleVerifyOTP)
-
+	auth.POST("/register", s.handleRegister)        // email + password → создаёт WebUser + сессию регистрации
+	auth.POST("/login", s.handleLogin)               // email + password → JWT или сессия 2FA
+	auth.GET("/status/:session_id", s.handleStatus)  // polling: PENDING | APPROVED+token | EXPIRED
+	auth.POST("/verify", s.handleVerify)             // ручной ввод OTP (fallback)
+ 
+	// ── Admin — защищённые эндпоинты (API key или JWT) ───────────────────────
 	admin := s.router.Group("/api/admin", s.authMiddleware())
 	admin.POST("/users", s.handleAdminCreateUser)
 	admin.DELETE("/users/:email", s.handleAdminDeleteUser)
@@ -146,110 +172,373 @@ func (s *Server) setupRoutes() {
 	admin.PATCH("/users/:email/block", s.handleAdminBlockUser)
 	admin.PATCH("/users/:email/unblock", s.handleAdminUnblockUser)
 	admin.POST("/users/:email/reset-traffic", s.handleAdminResetTraffic)
-
+ 
+	// ── Данные — только для авторизованных ───────────────────────────────────
 	g := s.router.Group("/api", s.authMiddleware())
 	g.GET("/stats", s.handleStats)
 	g.GET("/history", s.handleHistory)
+ 
+	// ── Статика — Next.js build ───────────────────────────────────────────────
 	s.router.Static("/", s.staticDir)
 	s.router.File("/", filepath.Join(s.staticDir, "index.html"))
 }
 
-// --- Auth handlers ---
+// ── Auth handlers ─────────────────────────────────────────────────────────────
  
-type requestOTPInput struct {
-	TelegramID int64 `json:"telegram_id"`
+// registerInput — тело запроса для регистрации.
+type registerInput struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
  
-// POST /api/auth/request-otp
-// Генерирует OTP, сохраняет в БД и отправляет через Telegram бота.
-// Принимает: {"telegram_id": 123456}
-func (s *Server) handleRequestOTP(c echo.Context) error {
-	var input requestOTPInput
+// registerResponse — ответ на успешную регистрацию.
+// SessionID используется фронтом для polling и построения TG-ссылки.
+type registerResponse struct {
+	SessionID string `json:"session_id"`
+	TGLink    string `json:"tg_link"` // https://t.me/lovely_arti_bot?start=reg_{session_id}
+}
+ 
+// handleRegister обрабатывает регистрацию нового пользователя.
+//
+// Флоу:
+//  1. Валидация email + password
+//  2. Проверка что email не занят
+//  3. Хеширование пароля (bcrypt cost=12)
+//  4. Создание WebUser со статусом PENDING
+//  5. Создание AuthSession типа REGISTER (без OTP — апрув через TG)
+//  6. Возврат session_id и TG-ссылки для QR-кода
+//
+// После: фронт показывает QR, polling ждёт APPROVED.
+// Бот апрувит → WebUser.Status = ACTIVE, TelegramID привязан.
+func (s *Server) handleRegister(c echo.Context) error {
+	var input registerInput
 	if err := c.Bind(&input); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		fmt.Println("Failed to bind register input:", err)
+		return c.JSON(http.StatusBadRequest, errResp("invalid request body"))
 	}
-	if input.TelegramID == 0 {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "telegram_id is required"})
+	if input.Email == "" || input.Password == "" {
+		fmt.Println("Email or password is empty")
+		return c.JSON(http.StatusBadRequest, errResp("email and password are required"))
 	}
- 
-	// Проверяем что запрос идёт от известного администратора.
-	// В будущем здесь будет поиск по БД для многопользовательского режима.
-	if input.TelegramID != s.adminTelegramID {
-		slog.Warn("otp requested for unknown telegram_id", "telegram_id", input.TelegramID, "remote_ip", c.RealIP())
-		// Отвечаем одинаково — не раскрываем существует ли пользователь (timing-safe по смыслу)
-		return c.JSON(http.StatusOK, map[string]string{"message": "if this account exists, a code has been sent"})
+	if len(input.Password) < 8 {
+		fmt.Println("Password is too short")
+		return c.JSON(http.StatusBadRequest, errResp("password must be at least 8 characters"))
 	}
  
+	ctx := c.Request().Context()
+ 
+	// Проверяем уникальность email перед тяжёлой операцией bcrypt
+	if _, err := s.webUserStore.GetWebUserByEmail(ctx, input.Email); !errors.Is(err, dbstore.ErrNotFound) {
+		fmt.Println("Email already registered:", input.Email)
+		// err == nil означает что пользователь найден — email занят
+		// Любая другая ошибка — возвращаем 500
+		if err == nil {
+			fmt.Println("Email already registered:", input.Email)
+			return c.JSON(http.StatusConflict, errResp("email already registered"))
+		}
+		slog.Error("register: db lookup failed", "error", err)
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
+	}
+
+	// bcrypt cost=12 — баланс между безопасностью и временем (~250ms на современном железе).
+	// Это намеренно медленно: защита от брутфорса на уровне алгоритма.
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), 12)
+	if err != nil {
+		slog.Error("register: bcrypt failed", "error", err)
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
+	}
+
+	user := &models.WebUser{
+		Email:        input.Email,
+		PasswordHash: string(hash),
+		Status:       models.WebUserPending,
+	}
+	if err := s.webUserStore.CreateWebUser(ctx, user); err != nil {
+		slog.Error("register: create user failed", "email", input.Email, "error", err)
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
+	}
+ 
+	// Создаём сессию регистрации. OTP не нужен — достаточно факта нажатия START в боте.
+	session := &models.AuthSession{
+		ID:        uuid.NewString(),
+		WebUserID: user.ID,
+		Kind:      models.SessionKindRegister,
+		Status:    models.SessionPending,
+		ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
+	}
+	if err := s.sessionStore.SaveSession(ctx, session); err != nil {
+		slog.Error("register: save session failed", "user_id", user.ID, "error", err)
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
+	}
+ 
+	tgLink := fmt.Sprintf("https://t.me/lovely_arti_bot?start=reg_%s", session.ID)
+	slog.Info("web user registered, awaiting tg confirmation",
+		"email", input.Email,
+		"user_id", user.ID,
+		"session_id", session.ID,
+	)
+ 
+	return c.JSON(http.StatusCreated, registerResponse{
+		SessionID: session.ID,
+		TGLink:    tgLink,
+	})
+}
+ 
+// loginInput — тело запроса для входа.
+type loginInput struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+ 
+// loginResponse — ответ на успешный вход.
+//
+// Если RequiresTwoFA == false: Token содержит JWT, вход завершён.
+// Если RequiresTwoFA == true:  SessionID содержит ID 2FA-сессии для polling и ввода кода.
+type loginResponse struct {
+	Token        string `json:"token,omitempty"`
+	RequiresTwoFA bool   `json:"requires_two_fa"`
+	SessionID    string `json:"session_id,omitempty"`
+	TGLink       string `json:"tg_link,omitempty"` // ссылка для 2FA через TG
+}
+ 
+// handleLogin обрабатывает вход по email + password.
+//
+// Флоу A (пользователь ACTIVE):
+//  1. Проверка пароля (bcrypt)
+//  2. Создание 2FA-сессии + генерация OTP
+//  3. Отправка OTP в Telegram
+//  4. Ответ: {requires_two_fa: true, session_id, tg_link}
+//  5. Фронт показывает экран 2FA, polling ждёт APPROVED
+//
+// Флоу B (пользователь PENDING):
+//  1. Проверка пароля
+//  2. Ответ: {requires_two_fa: true, session_id} — восстановление QR-экрана
+//
+// Намеренно не раскрываем причину отказа ("email не найден" vs "неверный пароль") —
+// это защита от user enumeration атак.
+func (s *Server) handleLogin(c echo.Context) error {
+	var input loginInput
+	if err := c.Bind(&input); err != nil {
+		return c.JSON(http.StatusBadRequest, errResp("invalid request body"))
+	}
+	if input.Email == "" || input.Password == "" {
+		return c.JSON(http.StatusBadRequest, errResp("email and password are required"))
+	}
+ 
+	ctx := c.Request().Context()
+ 
+	user, err := s.webUserStore.GetWebUserByEmail(ctx, input.Email)
+	if err != nil {
+		if errors.Is(err, dbstore.ErrNotFound) {
+			// Одинаковая задержка что и при неверном пароле — против timing-атак
+			_ = bcrypt.CompareHashAndPassword([]byte("$2a$12$dummy"), []byte(input.Password))
+			return c.JSON(http.StatusUnauthorized, errResp("invalid credentials"))
+		}
+		slog.Error("login: db lookup failed", "error", err)
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
+	}
+ 
+	// Проверяем пароль через bcrypt. Намеренно медленно.
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.Password)); err != nil {
+		slog.Warn("login: invalid password attempt", "email", input.Email, "remote_ip", c.RealIP())
+		return c.JSON(http.StatusUnauthorized, errResp("invalid credentials"))
+	}
+ 
+	if user.Status == models.WebUserSuspended {
+		slog.Warn("login: suspended user attempted login", "email", input.Email)
+		return c.JSON(http.StatusForbidden, errResp("account suspended"))
+	}
+ 
+	// Флоу B: пользователь ещё не привязал TG — возвращаем на QR-экран.
+	// Создаём новую сессию регистрации чтобы QR был рабочим.
+	if user.Status == models.WebUserPending {
+		session := &models.AuthSession{
+			ID:        uuid.NewString(),
+			WebUserID: user.ID,
+			Kind:      models.SessionKindRegister,
+			Status:    models.SessionPending,
+			ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
+		}
+		if err := s.sessionStore.SaveSession(ctx, session); err != nil {
+			return c.JSON(http.StatusInternalServerError, errResp("internal error"))
+		}
+		tgLink := fmt.Sprintf("https://t.me/lovely_arti_bot?start=reg_%s", session.ID)
+		return c.JSON(http.StatusOK, loginResponse{
+			RequiresTwoFA: true,
+			SessionID:     session.ID,
+			TGLink:        tgLink,
+		})
+	}
+ 
+	// Флоу A: пользователь ACTIVE — создаём 2FA-сессию и отправляем OTP в TG.
 	code, err := generateOTPCode()
 	if err != nil {
-		slog.Error("failed to generate otp code", "error", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		slog.Error("login: otp generation failed", "error", err)
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
 	}
  
-	otp := &models.OTPCode{
-		AdminID:   input.TelegramID,
-		Code:      code,
-		ExpiresAt: time.Now().UTC().Add(5 * time.Minute),
-		Used:      false,
+	session := &models.AuthSession{
+		ID:        uuid.NewString(),
+		WebUserID: user.ID,
+		Kind:      models.SessionKindLogin2FA,
+		OTPCode:   code,
+		Status:    models.SessionPending,
+		ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
+	}
+	if err := s.sessionStore.SaveSession(ctx, session); err != nil {
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
 	}
  
-	if err := s.otpStore.SaveOTP(c.Request().Context(), otp); err != nil {
-		slog.Error("failed to save otp", "error", err, "telegram_id", input.TelegramID)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
+	// Отправляем OTP через бота. user.TelegramID гарантированно != nil (статус ACTIVE).
+	if err := s.notifier.SendOTP(ctx, *user.TelegramID, code); err != nil {
+		slog.Error("login: failed to send otp", "email", input.Email, "error", err)
+		return c.JSON(http.StatusInternalServerError, errResp("failed to send verification code"))
 	}
  
-	if err := s.notifier.SendOTP(c.Request().Context(), input.TelegramID, code); err != nil {
-		slog.Error("failed to send otp via telegram", "error", err, "telegram_id", input.TelegramID)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to send code"})
-	}
+	// TG-ссылка для 2FA — бот апрувит сессию нажатием START (альтернатива вводу кода).
+	tgLink := fmt.Sprintf("https://t.me/lovely_arti_bot?start=2fa_%s", session.ID)
  
-	slog.Info("otp sent", "telegram_id", input.TelegramID)
-	return c.JSON(http.StatusOK, map[string]string{"message": "code sent to your Telegram"})
+	// Фиксируем IP последнего входа (точнее — попытки, 2FA ещё не пройдена).
+	// Полная запись с временем будет после успешного verify.
+	go func() {
+		_ = s.webUserStore.UpdateWebUserLogin(context.Background(), user.ID, c.RealIP())
+	}()
+ 
+	slog.Info("login: 2fa session created, otp sent",
+		"email", input.Email,
+		"session_id", session.ID,
+	)
+ 
+	return c.JSON(http.StatusOK, loginResponse{
+		RequiresTwoFA: true,
+		SessionID:     session.ID,
+		TGLink:        tgLink,
+	})
 }
  
-type verifyOTPInput struct {
-	TelegramID int64  `json:"telegram_id"`
-	Code       string `json:"code"`
+// statusResponse — ответ на polling запрос.
+type statusResponse struct {
+	Status string `json:"status"`          // PENDING | APPROVED | EXPIRED
+	Token  string `json:"token,omitempty"` // JWT — только при APPROVED
 }
  
-// POST /api/auth/verify-otp
-// Проверяет OTP, возвращает JWT при успехе.
-// Принимает: {"telegram_id": 123456, "code": "847291"}
-// Возвращает: {"token": "eyJ..."}
-func (s *Server) handleVerifyOTP(c echo.Context) error {
-	var input verifyOTPInput
+// handleStatus — polling эндпоинт. Фронт опрашивает каждые ~1.5 секунды.
+//
+// При APPROVED выдаёт JWT и статус сессии — дальнейший polling не нужен.
+// При EXPIRED фронт перенаправляет пользователя на начало флоу.
+func (s *Server) handleStatus(c echo.Context) error {
+	sessionID := c.Param("session_id")
+	if sessionID == "" {
+		return c.JSON(http.StatusBadRequest, errResp("session_id is required"))
+	}
+ 
+	ctx := c.Request().Context()
+ 
+	session, err := s.sessionStore.FindValidSession(ctx, sessionID)
+	if err != nil {
+		if errors.Is(err, dbstore.ErrNotFound) {
+			// Сессия не найдена или просрочена — клиент должен начать заново.
+			return c.JSON(http.StatusOK, statusResponse{Status: string(models.SessionExpired)})
+		}
+		slog.Error("status: db lookup failed", "session_id", sessionID, "error", err)
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
+	}
+ 
+	if session.Status != models.SessionApproved {
+		return c.JSON(http.StatusOK, statusResponse{Status: string(session.Status)})
+	}
+ 
+	// Сессия апрувнута — генерируем JWT и завершаем флоу.
+	token, err := s.issueJWT(ctx, session.WebUserID)
+	if err != nil {
+		slog.Error("status: jwt issue failed", "session_id", sessionID, "error", err)
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
+	}
+ 
+	slog.Info("status: session approved, jwt issued",
+		"session_id", sessionID,
+		"web_user_id", session.WebUserID,
+		"kind", session.Kind,
+	)
+ 
+	return c.JSON(http.StatusOK, statusResponse{
+		Status: string(models.SessionApproved),
+		Token:  token,
+	})
+}
+ 
+// verifyInput — тело запроса для ручного ввода OTP.
+type verifyInput struct {
+	SessionID string `json:"session_id"`
+	Code      string `json:"code"`
+}
+ 
+// handleVerify — fallback для ручного ввода кода из Telegram.
+//
+// Работает только для сессий типа LOGIN_2FA — у регистрационных сессий нет OTP.
+// При успехе переводит сессию в APPROVED и возвращает JWT.
+func (s *Server) handleVerify(c echo.Context) error {
+	var input verifyInput
 	if err := c.Bind(&input); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return c.JSON(http.StatusBadRequest, errResp("invalid request body"))
 	}
-	if input.TelegramID == 0 || input.Code == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "telegram_id and code are required"})
+	if input.SessionID == "" || input.Code == "" {
+		return c.JSON(http.StatusBadRequest, errResp("session_id and code are required"))
 	}
  
-	otp, err := s.otpStore.FindValidOTP(c.Request().Context(), input.TelegramID, input.Code)
+	ctx := c.Request().Context()
+ 
+	session, err := s.sessionStore.FindValidSession(ctx, input.SessionID)
 	if err != nil {
-		// Не различаем "не найден" и "истёк" — одинаковый ответ против брутфорса
-		slog.Warn("invalid or expired otp attempt", "telegram_id", input.TelegramID, "remote_ip", c.RealIP())
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid or expired code"})
+		if errors.Is(err, dbstore.ErrNotFound) {
+			return c.JSON(http.StatusUnauthorized, errResp("session expired or not found"))
+		}
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
 	}
  
-	if err := s.otpStore.MarkOTPUsed(c.Request().Context(), otp.ID); err != nil {
-		slog.Error("failed to mark otp as used", "error", err, "otp_id", otp.ID)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
+	// Ручной ввод кода — только для 2FA сессий.
+	if session.Kind != models.SessionKindLogin2FA {
+		return c.JSON(http.StatusBadRequest, errResp("code verification not applicable for this session type"))
 	}
  
-	token, err := s.generateJWT(input.TelegramID)
+	// Уже апрувнута (бот успел раньше) — просто выдаём токен.
+	if session.Status == models.SessionApproved {
+		token, err := s.issueJWT(ctx, session.WebUserID)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, errResp("internal error"))
+		}
+		return c.JSON(http.StatusOK, map[string]string{"token": token})
+	}
+ 
+	// constant-time сравнение — защита от timing-атак на OTP.
+	if !secureCompare(input.Code, session.OTPCode) {
+		slog.Warn("verify: invalid otp code",
+			"session_id", input.SessionID,
+			"remote_ip", c.RealIP(),
+		)
+		return c.JSON(http.StatusUnauthorized, errResp("invalid code"))
+	}
+ 
+	if err := s.sessionStore.UpdateSessionStatus(ctx, session.ID, models.SessionApproved); err != nil {
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
+	}
+ 
+	token, err := s.issueJWT(ctx, session.WebUserID)
 	if err != nil {
-		slog.Error("failed to generate jwt", "error", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
 	}
  
-	slog.Info("otp verified, jwt issued", "telegram_id", input.TelegramID)
+	slog.Info("verify: otp confirmed manually, jwt issued",
+		"session_id", session.ID,
+		"web_user_id", session.WebUserID,
+	)
+ 
 	return c.JSON(http.StatusOK, map[string]string{"token": token})
 }
 
 type createUserInput struct {
 	Email        string     `json:"email"`
-	TelegramID   int64      `json:"telegram_id"`
+	TelegramID   *int64      `json:"telegram_id"`
 	InboundTag   string     `json:"inbound_tag"`
 	VlessFlow    string     `json:"vless_flow"`
 	TrafficLimit int64      `json:"traffic_limit"`
@@ -260,7 +549,7 @@ func (input *createUserInput) validate() error {
     if input.Email == "" {
         return fmt.Errorf("email is required")
     }
-    if input.TelegramID <= 0 {
+    if input.TelegramID != nil && *input.TelegramID <= 0 {
         return fmt.Errorf("telegram_id must be > 0")
     }
     if input.TrafficLimit < 0 {
@@ -276,70 +565,89 @@ func isNotFoundError(err error) bool {
 	return errors.Is(err, dbstore.ErrNotFound)
 }
 
-// --- Middleware ---
+// ── Middleware ────────────────────────────────────────────────────────────────
  
-// authMiddleware принимает два типа токенов:
-// 1. Статичный API ключ (API_ADMIN_TOKEN) — для Postman и CI/CD
-// 2. JWT выданный после успешной верификации OTP — для демонстрации 2FA
+// authMiddleware проверяет либо статический API-ключ (для admin-скриптов),
+// либо JWT выданный нашим сервером (для веб-клиента).
+// При успехе кладёт claims в контекст под ключом "claims".
 func (s *Server) authMiddleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			authHeader := c.Request().Header.Get("Authorization")
 			if authHeader == "" {
-				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+				return c.JSON(http.StatusUnauthorized, errResp("unauthorized"))
 			}
  
-			// Пробуем статичный ключ
+			// Проверяем статический API-ключ (Bearer <api_key>).
 			if secureCompare(authHeader, "Bearer "+s.apiKey) {
 				return next(c)
 			}
  
-			// Пробуем JWT
+			// Проверяем JWT.
 			const prefix = "Bearer "
-			if len(authHeader) > len(prefix) {
-				tokenStr := authHeader[len(prefix):]
-				if err := s.validateJWT(tokenStr); err == nil {
-					return next(c)
-				}
+			if len(authHeader) <= len(prefix) {
+				return c.JSON(http.StatusUnauthorized, errResp("unauthorized"))
+			}
+			tokenStr := authHeader[len(prefix):]
+			claims, err := s.parseJWT(tokenStr)
+			if err != nil {
+				slog.Warn("auth: invalid jwt", "remote_ip", c.RealIP(), "path", c.Request().URL.Path)
+				return c.JSON(http.StatusUnauthorized, errResp("unauthorized"))
 			}
  
-			slog.Warn("unauthorized api access",
-				"remote_ip", c.RealIP(),
-				"path", c.Request().URL.Path,
-			)
-			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			// Кладём claims в контекст — хендлеры могут использовать для персонализации.
+			c.Set("claims", claims)
+			return next(c)
 		}
 	}
 }
-
-// requestLogger логирует входящие запросы через slog.
+ 
 func requestLogger() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			start := time.Now()
 			err := next(c)
-			slog.Info("http request",
-				"method",     c.Request().Method,
-				"path",       c.Request().URL.Path,
-				"status",     c.Response().Status,
-				"latency_ms", time.Since(start).Milliseconds(),
-				"remote_ip",  c.RealIP(),
+			slog.Info("http",
+				"method", c.Request().Method,
+				"path", c.Request().URL.Path,
+				"status", c.Response().Status,
+				"ms", time.Since(start).Milliseconds(),
+				"ip", c.RealIP(),
 			)
 			return err
 		}
 	}
 }
 
-// --- JWT helpers ---
+// ── JWT ───────────────────────────────────────────────────────────────────────
  
+// jwtClaims — payload нашего JWT.
+// HasXray позволяет фронту сразу знать нужно ли показывать плейсхолдеры.
 type jwtClaims struct {
-	TelegramID int64 `json:"telegram_id"`
+	WebUserID uint   `json:"web_user_id"`
+	Email     string `json:"email"`
+	HasXray   bool   `json:"has_xray"` // есть ли Xray-аккаунт (для показа метрик)
 	jwt.RegisteredClaims
 }
  
-func (s *Server) generateJWT(telegramID int64) (string, error) {
+// issueJWT выдаёт JWT для web-пользователя.
+// Проверяет наличие Xray-аккаунта и пишет флаг в claims.
+func (s *Server) issueJWT(ctx context.Context, webUserID uint) (string, error) {
+	slog.Info("issueJWT starting", "webUserID", webUserID, "hasStore", s.webUserStore != nil)
+	user, err := s.webUserStore.GetWebUserByID(ctx, webUserID)
+	if err != nil {
+		return "", fmt.Errorf("issueJWT: get web user: %w", err)
+	}
+ 
+	// Проверяем наличие Xray-аккаунта по email.
+	// Ошибка здесь не критична — просто выставим HasXray=false.
+	_, xrayErr := s.userStore.GetUserByEmail(ctx, user.Email)
+	hasXray := xrayErr == nil
+ 
 	claims := jwtClaims{
-		TelegramID: telegramID,
+		WebUserID: user.ID,
+		Email:     user.Email,
+		HasXray:   hasXray,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -349,7 +657,7 @@ func (s *Server) generateJWT(telegramID int64) (string, error) {
 	return token.SignedString([]byte(s.jwtSecret))
 }
  
-func (s *Server) validateJWT(tokenStr string) error {
+func (s *Server) parseJWT(tokenStr string) (*jwtClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &jwtClaims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
@@ -357,12 +665,13 @@ func (s *Server) validateJWT(tokenStr string) error {
 		return []byte(s.jwtSecret), nil
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if !token.Valid {
-		return fmt.Errorf("token is not valid")
+	claims, ok := token.Claims.(*jwtClaims)
+	if !ok || !token.Valid {
+		return nil, fmt.Errorf("invalid token")
 	}
-	return nil
+	return claims, nil
 }
 
 // --- API handlers ---
@@ -580,13 +889,13 @@ func (s *Server) handleAdminResetTraffic(c echo.Context) error {
 }
 
 
-// --- Helpers ---
+// ── Helpers ───────────────────────────────────────────────────────────────────
  
 // generateOTPCode генерирует криптографически безопасный 6-значный код.
 // crypto/rand вместо math/rand — нельзя предсказать следующий код.
 func generateOTPCode() (string, error) {
 	const digits = 6
-	max := new(big.Int).Exp(big.NewInt(10), big.NewInt(digits), nil) // 10^6 = 1000000
+	max := new(big.Int).Exp(big.NewInt(10), big.NewInt(digits), nil) // 10^6 = 1_000_000
 	n, err := rand.Int(rand.Reader, max)
 	if err != nil {
 		return "", fmt.Errorf("generate random otp: %w", err)
@@ -601,4 +910,14 @@ func secureCompare(given, expected string) bool {
 		return false
 	}
 	return subtle.ConstantTimeCompare(g, e) == 1
+}
+
+// errResp формирует стандартный JSON-ответ с ошибкой.
+func errResp(msg string) map[string]string {
+	return map[string]string{"error": msg}
+}
+ 
+// isNotFound проверяет является ли ошибка "запись не найдена".
+func isNotFound(err error) bool {
+	return errors.Is(err, dbstore.ErrNotFound)
 }

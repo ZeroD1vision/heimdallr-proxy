@@ -50,6 +50,9 @@ func NewStore(dsn string) (*Store, error) {
 		&models.User{}, 
 		&models.UserHistory{},
 		&models.OTPCode{},
+		&models.AuthSession{},
+		&models.WebUser{},
+    	&models.AuthSession{},
 	); err != nil {
         return nil, fmt.Errorf("migration failed: %w", err)
     }
