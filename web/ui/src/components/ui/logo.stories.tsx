@@ -40,11 +40,11 @@ export const StressTest: Story = {
   },
   render: (args) => (
     <div className="relative group">
-       <Logo {...args} />
-       {/* Вспомогательная сетка для проверки выравнивания */}
-       <div className="absolute inset-0 border border-cyan-500/20 pointer-events-none" />
-       <div className="absolute inset-y-0 left-1/2 w-px bg-cyan-500/20 pointer-events-none" />
-       <div className="absolute inset-x-0 top-1/2 h-px bg-cyan-500/20 pointer-events-none" />
+      <Logo {...args} />
+      {/* Вспомогательная сетка для проверки выравнивания */}
+      <div className="absolute inset-0 border border-cyan-500/20 pointer-events-none" />
+      <div className="absolute inset-y-0 left-1/2 w-px bg-cyan-500/20 pointer-events-none" />
+      <div className="absolute inset-x-0 top-1/2 h-px bg-cyan-500/20 pointer-events-none" />
     </div>
   ),
 };

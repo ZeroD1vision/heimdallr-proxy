@@ -1,6 +1,12 @@
 'use client';
 
-import { motion, useScroll, useSpring, useTransform, AnimatePresence } from 'framer-motion';
+import {
+  motion,
+  useScroll,
+  useSpring,
+  useTransform,
+  AnimatePresence,
+} from 'framer-motion';
 import { useEffect, useState, useRef } from 'react';
 
 export default function Scrollbar() {
@@ -32,7 +38,7 @@ export default function Scrollbar() {
   const smoothProgress = useSpring(scrollYProgress, {
     stiffness: 60,
     damping: 20,
-    restDelta: 0.0001
+    restDelta: 0.0001,
   });
 
   // Позиция ползунка
@@ -45,51 +51,51 @@ export default function Scrollbar() {
    * ползунок начинает тянуться.
    */
   const stretch = useTransform(
-    smoothProgress, 
-    [-0.15, 0, 1, 1.15], 
+    smoothProgress,
+    [-0.15, 0, 1, 1.15],
     [2.8, 1, 1, 2.8]
   );
 
   const origin = useTransform(smoothProgress, (v) => {
-    if (v <= 0) return "top";
-    if (v >= 1) return "bottom";
-    return "center";
+    if (v <= 0) return 'top';
+    if (v >= 1) return 'bottom';
+    return 'center';
   });
 
   return (
     <div className="fixed right-4 top-1/2 -translate-y-1/2 z-[100] flex flex-col items-center group pointer-events-none">
       <AnimatePresence>
-      {/* Тягучий ползунок */}
-      {isVisible && (
-        <motion.div
-          initial={{ opacity: 0, x: 10, filter: 'blur(0px)' }}
-          animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-          exit={{ opacity: 0, x: 10, filter: 'blur(4px)' }}
-          transition={{ duration: 0.4, ease: "circOut" }}
-          /* Трек (направляющая) */
-          className="relative w-[2px] h-[240px] bg-white/15 rounded-full overflow-visible"
-        >
-          {/* Метка START */}
-          <div className="absolute -left-9 top-0 text-[8px] font-geist-mono text-zinc-600 rotate-90 origin-right tracking-[0.2em]">
-            START
-          </div>
-          {/* Тягучий ползунок */}
+        {/* Тягучий ползунок */}
+        {isVisible && (
           <motion.div
-            style={{
-              y,
-              scaleY: stretch,
-              originY: origin,
-              WebkitBackdropFilter: 'blur(10px) saturate(180%)',
-              backdropFilter: 'blur(10px) saturate(180%)',
-            }}
-            className="absolute -left-[3px] w-2 h-10 bg-white/30 border border-white/10 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.05)]"
-          />
-          {/* Метка END */}
-          <div className="absolute -left-6 bottom-0 text-[8px] font-geist-mono text-zinc-600 rotate-90 origin-right tracking-[0.2em]">
-            END
-          </div>
-        </motion.div>
-      )}
+            initial={{ opacity: 0, x: 10, filter: 'blur(0px)' }}
+            animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, x: 10, filter: 'blur(4px)' }}
+            transition={{ duration: 0.4, ease: 'circOut' }}
+            /* Трек (направляющая) */
+            className="relative w-[2px] h-[240px] bg-white/15 rounded-full overflow-visible"
+          >
+            {/* Метка START */}
+            <div className="absolute -left-9 top-0 text-[8px] font-geist-mono text-zinc-600 rotate-90 origin-right tracking-[0.2em]">
+              START
+            </div>
+            {/* Тягучий ползунок */}
+            <motion.div
+              style={{
+                y,
+                scaleY: stretch,
+                originY: origin,
+                WebkitBackdropFilter: 'blur(10px) saturate(180%)',
+                backdropFilter: 'blur(10px) saturate(180%)',
+              }}
+              className="absolute -left-[3px] w-2 h-10 bg-white/30 border border-white/10 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.05)]"
+            />
+            {/* Метка END */}
+            <div className="absolute -left-6 bottom-0 text-[8px] font-geist-mono text-zinc-600 rotate-90 origin-right tracking-[0.2em]">
+              END
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
