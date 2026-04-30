@@ -6,12 +6,73 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User, LogIn, UserPlus, Settings, LogOut } from 'lucide-react';
 import { Logo } from '@/components/ui/logo';
 import { GlassPane, GlassPaneContent } from '@/components/ui/glass-pane';
+import { usePathname, useRouter } from 'next/navigation';
+import { tokenStorage } from '@/lib/api';
+
+interface NavbarProps {
+  initialVariant?: 'public' | 'auth';
+}
 
 export default function Navbar() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [userEmail, setUserEmail] = useState('');
+  const [userBalance, setUserBalance] = useState('');
+  const [activeTab, setActiveTab] = useState('about');
+  const navigation = {
+    public: [
+      { id: 'about', label: 'About', href: '#about' },
+      { id: 'tech', label: 'Core', href: '#tech' },
+      { id: 'contact', label: 'Contact', href: '#contact' },
+    ],
+    auth: [
+      { id: 'login', label: 'Authorize', href: '/login' },
+      { id: 'register', label: 'Initialize', href: '/register' },
+    ],
+  };
+  // Собираем все табы в один массив для поиска
+  const allNavigationItems = [...navigation.public, ...navigation.auth];
+
+  const variant = navigation.auth.some(tab => pathname.startsWith(tab.href)) 
+    ? 'auth' 
+    : 'public';
+  const isAuth = variant === 'auth';
+  const currentTabs = navigation[variant];
+  const isSmall = variant === 'auth' || isScrolled;
+
+  useEffect(() => {
+    // Ищем элемент, чей href совпадает с текущим путем
+    // Использование .startsWith() поможет, если появятся вложенные роуты
+    const currentTab = allNavigationItems.find(tab => 
+      pathname === tab.href || (tab.href !== '/' && pathname.startsWith(tab.href))
+    );
+
+    if (currentTab) {
+      setActiveTab(currentTab.id);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    const token = tokenStorage.getToken();
+    setIsLoggedIn(!!token);
+    // В идеале тут должен быть вызов authApi.getMe() для получения данных профиля
+    // Но для простоты сейчас просто хардкодим email при наличии токена
+    if (token) {
+      setUserBalance('1,240.00 ᚱ'); // Заглушка для баланса
+      setUserEmail('artemiy@heimdallr.local')
+    };
+  }, [pathname]);
+
+  const handleLogout = () => {
+    tokenStorage.clearAll();
+    setIsLoggedIn(false);
+    setUserEmail('');
+    router.push(`\/${variant === 'auth' ? 'login' : ''}`);
+  }
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
@@ -31,14 +92,13 @@ export default function Navbar() {
   return (
     <nav className="fixed top-6 left-0 w-full z-50 pointer-events-none">
       <div className="max-w-[80%] font-syne mx-auto relative pointer-events-auto flex justify-between items-center px-4 py-2">
-
         {/* Шторка — фоновый слой, знает что она absolute z-0 */}
         <GlassPane
           layout
           animate={{
-            width: isScrolled ? '360px' : '100%',
-            height: isScrolled ? '48px' : '64px',
-            borderRadius: isScrolled ? '24px' : '16px',
+            width: isSmall ? '400px' : '100%',
+            height: isSmall ? '48px' : '64px',
+            borderRadius: isSmall ? '24px' : '16px',
           }}
           className="left-1/2 -translate-x-1/2"
         />
@@ -47,8 +107,8 @@ export default function Navbar() {
         <GlassPaneContent
           as={motion.div}
           animate={{
-            x: isScrolled ? '-10vw' : 0,
-            scale: isScrolled ? 0.8 : 1,
+            x: isSmall ? '-10vw' : 0,
+            scale: isSmall ? 0.8 : 1,
           }}
           initial="initial"
           whileHover="hover"
@@ -62,14 +122,43 @@ export default function Navbar() {
           </Link>
         </GlassPaneContent>
 
-        {/* Центральное меню — absolute, не нуждается в GlassPaneContent */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center px-6 py-2 
-            bg-black/[0.3] border border-white/10 rounded-full backdrop-brightness-[1.1]
-            backdrop-blur-3xl backdrop-saturate-[180%] shadow-2xl">
-          <div className="flex text-[12px] items-center gap-10 font-bold uppercase tracking-[0.25em]">
-            <NavLink href="#about">About</NavLink>
-            <NavLink href="#tech">Core</NavLink>
-            <NavLink href="#contact">Contact</NavLink>
+        {/* Центральное меню — абсолютный контейнер */}
+        <div
+          className="absolute left-1/2 -translate-x-1/2 flex items-center px-4 py-1 
+            bg-black/[0.3] border border-white/10 rounded-full backdrop-blur-3xl 
+            backdrop-saturate-[180%] shadow-2xl z-10"
+        >
+          <div className="flex text-[12px] items-center font-bold uppercase tracking-[0.25em] relative">
+            <AnimatePresence mode="popLayout">
+              {currentTabs.map((tab) => (
+                <Link
+                  key={tab.id}
+                  href={tab.href}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-6 py-1 transition-colors duration-500 relative z-10 ${
+                    activeTab === tab.id
+                      ? 'text-white'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {/* Текст ссылки */}
+                  <span className="relative z-20">{tab.label}</span>
+
+                  {/* Акцентное стеклянное пятно */}
+                  {activeTab === tab.id && (
+                    <motion.div
+                      layoutId="active-pill"
+                      transition={{
+                        type: 'spring',
+                        stiffness: 380,
+                        damping: 30,
+                      }}
+                      className="absolute inset-0 bg-white/10 rounded-full border border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.1)] z-10"
+                    />
+                  )}
+                </Link>
+              ))}
+            </AnimatePresence>
           </div>
         </div>
 
@@ -79,13 +168,13 @@ export default function Navbar() {
           className="group"
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
-          animate={{ x: isScrolled ? '10vw' : 0 }}
+          animate={{ x: isSmall ? '10vw' : 0 }}
           transition={{ type: 'spring', stiffness: 150, damping: 25 }}
         >
           <motion.div
             animate={{
-              borderRadius: isScrolled ? '20px' : '12px',
-              clipPath: `inset(0px round ${isScrolled ? '20px' : '12px'})`,
+              borderRadius: isSmall ? '20px' : '12px',
+              clipPath: `inset(0px round ${isSmall ? '20px' : '12px'})`,
             }}
             transition={{ type: 'spring', stiffness: 100, damping: 30 }}
             className="w-10 h-10 flex items-center justify-center border border-white/10 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
@@ -102,7 +191,7 @@ export default function Navbar() {
             <div className="absolute top-full left-0 w-full h-4" />
           )}
 
-          {/* Account popover */}
+          {/* Выпадающее меню аккаунта */}
           <AnimatePresence>
             {isAccountOpen && (
               <motion.div
@@ -110,33 +199,41 @@ export default function Navbar() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
                 transition={{ duration: 0.15, ease: 'easeOut' }}
-                style={{ 
+                style={{
                   // Принудительно заставляем GPU считать этот слой отдельно
                   isolation: 'isolate',
-                  WebkitBackdropFilter: 'blur(30px) saturate(150%)', 
-                  backdropFilter: 'blur(30px) saturate(150%)'
-                  }}
+                  WebkitBackdropFilter: 'blur(30px) saturate(150%)',
+                  backdropFilter: 'blur(30px) saturate(150%)',
+                }}
                 className="absolute right-0 mt-5 w-64 glass-card p-5 shadow-2xl origin-top-right"
               >
                 <div className="space-y-4">
-                  <div className="pb-4 border-b border-zinc-800">
-                    <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">Session Identity</p>
-                    <p className="text-white font-medium">
-                      {isLoggedIn ? 'Artemiy Koshkin' : 'Unauthorized Entity'}
-                    </p>
-                  </div>
+                  <div className="pb-4 border-b border-white/5">
+                  <p className="text-[9px] text-zinc-400 uppercase tracking-[0.2em] mb-1">Entity Status</p>
+                  <p className="text-white font-geist-mono text-xs truncate uppercase">
+                    {isLoggedIn ? userEmail : 'Unauthorized'}
+                  </p>
+                </div>
                   <div className="flex flex-col gap-1">
                     {isLoggedIn ? (
                       <>
-                        <AccountLink href="/profile" icon={<Settings size={14} />} label="Profile Settings" />
-                        <button className="flex items-center gap-3 px-3 py-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-all text-sm">
-                          <LogOut size={14} /> Log Out
+                        <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/5 mb-2">
+                          <p className="text-[8px] text-zinc-500 uppercase tracking-widest">Balance</p>
+                          <p className="text-emerald-400 font-bold font-syne text-sm">{ userBalance }</p>
+                        </div>
+                        <AccountLink href="/dashboard" icon={<Settings size={14} />} label="Node Control" />
+                        <AccountLink href="/profile" icon={<User size={14} />} label="Profile" />
+                        <button 
+                          onClick={handleLogout}
+                          className="flex items-center gap-3 px-3 py-2 text-red-400/80 hover:bg-red-500/10 rounded-lg transition-all text-sm mt-2"
+                        >
+                          <LogOut size={14} /> Terminate Session
                         </button>
                       </>
                     ) : (
                       <>
                         <AccountLink href="/login" icon={<LogIn size={14} />} label="Authorize" />
-                        <AccountLink href="/register" icon={<UserPlus size={14} />} label="Request Access" />
+                        <AccountLink href="/register" icon={<UserPlus size={14} />} label="Initialize" />
                       </>
                     )}
                   </div>
@@ -145,22 +242,38 @@ export default function Navbar() {
             )}
           </AnimatePresence>
         </GlassPaneContent>
-
       </div>
     </nav>
   );
 }
 
-function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
+function NavLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
   return (
-    <Link href={href} className="text-zinc-300 hover:text-white transition-all duration-300 relative group">
+    <Link
+      href={href}
+      className="text-zinc-300 hover:text-white transition-all duration-300 relative group"
+    >
       {children}
       <span className="absolute -bottom-1 left-0 w-0 h-[1px] bg-white transition-all duration-300 group-hover:w-full opacity-50" />
     </Link>
   );
 }
 
-function AccountLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
+function AccountLink({
+  href,
+  icon,
+  label,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+}) {
   return (
     <Link
       href={href}

@@ -22,31 +22,36 @@ export function GlassPane({ className = '', ...motionProps }: GlassPaneProps) {
         backdropFilter: 'blur(12px) saturate(180%) brightness(1.05)',
         WebkitBackdropFilter: 'blur(12px) saturate(180%) brightness(1.05)',
         background: 'rgba(0, 0, 0, 0.04)',
-        boxShadow: '0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.1)',
+        boxShadow:
+          '0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.1)',
         ...motionProps.style,
       }}
     >
       {/* Канал Red: смещен чуть влево */}
-      <div className="absolute inset-0 z-[-1] pointer-events-none opacity-50 mix-blend-screen rounded-[inherit]"
-           style={{ 
-             backdropFilter: 'blur(12px)',
-             WebkitBackdropFilter: 'blur(12px)',
-             clipPath: 'inset(0 1px 0 0)', // Микро-сдвиг логический
-             transform: 'translateX(-1.5px)' 
-           }} />
-      
+      <div
+        className="absolute inset-0 z-[-1] pointer-events-none opacity-50 mix-blend-screen rounded-[inherit]"
+        style={{
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          clipPath: 'inset(0 1px 0 0)', // Микро-сдвиг логический
+          transform: 'translateX(-1.5px)',
+        }}
+      />
+
       {/* Канал Blue/Cyan: смещен чуть вправо */}
-      <div className="absolute inset-0 z-[-1] pointer-events-none opacity-50 mix-blend-screen rounded-[inherit]"
-           style={{ 
-             backdropFilter: 'blur(12px)',
-             WebkitBackdropFilter: 'blur(12px)',
-             clipPath: 'inset(0 0 0 1px)',
-             transform: 'translateX(1.5px)' 
-           }} />
+      <div
+        className="absolute inset-0 z-[-1] pointer-events-none opacity-50 mix-blend-screen rounded-[inherit]"
+        style={{
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          clipPath: 'inset(0 0 0 1px)',
+          transform: 'translateX(1.5px)',
+        }}
+      />
 
       {/* Основной слой (Green/Luminance) */}
       <div className="absolute inset-0 z-[-1] backdrop-blur-md bg-white/[0.03] rounded-[inherit]" />
-      
+
       <div className="glass-pane-refraction absolute inset-0 pointer-events-none rounded-[inherit]" />
     </motion.div>
   );
