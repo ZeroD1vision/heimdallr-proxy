@@ -1,0 +1,102 @@
+// src/lib/api.ts
+// Типизированный клиент к Heimdallr API.
+// Все эндпоинты описаны здесь — компоненты не знают про fetch напрямую.
+
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type SessionStatus = 'PENDING' | 'APPROVED' | 'EXPIRED';
+
+export interface AuthResponse {
+  session_id?: string;
+  token?: string;      // Выдается только когда статус APPROVED
+  tg_link?: string;    // Ссылка вида https://t.me/bot?start=auth_uuid
+  status?: SessionStatus;
+  message?: string;
+}
+
+export interface ApiError {
+  error: string;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...init,
+  });
+
+  // Если бэк ничего не вернул (204 No Content)
+  if (res.status === 204) return {} as T;
+
+  if (!res.ok) {
+    const text = await res.text(); // Читаем как текст, чтобы не было SyntaxError
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+
+  return data as T;
+}
+
+// ── Auth API ──────────────────────────────────────────────────────────────────
+
+export const authApi = {
+  /**
+   * 1. Вход по Email/Pass. 
+   * Бэк создает сессию AWAITING_2FA и возвращает session_id + ссылку на бота.
+   */
+  login: (email: string, pass: string) =>
+    request<AuthResponse>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password: pass }),
+    }),
+
+  /**
+   * 2. Регистрация.
+   * Создает пользователя в статусе PENDING и сессию для привязки Telegram.
+   */
+  register: (email: string, pass: string) =>
+    request<AuthResponse>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password: pass }),
+    }),
+
+  /**
+   * 3. Магический Поллинг.
+   * Фронт долбит этот эндпоинт, пока статус не станет APPROVED.
+   */
+  pollStatus: (sessionId: string) =>
+    request<AuthResponse>(`/api/auth/status/${sessionId}`),
+
+  /**
+   * 4. Fallback: Ручной ввод OTP.
+   * Если автоматика через бота не прошла, юзер вводит 6 цифр из сообщения.
+   */
+  verifyOtp: (sessionId: string, code: string) =>
+    request<AuthResponse>('/api/auth/verify', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId, code }),
+    }),
+};
+
+// ── Storage ───────────────────────────────────────────────────────────────────
+
+const TOKEN_KEY = 'h_jwt';
+const SESSION_KEY = 'h_sid';
+
+export const tokenStorage = {
+  // JWT - токен доступа
+  getToken: () => (typeof window !== 'undefined' ? sessionStorage.getItem(TOKEN_KEY) : null),
+  setToken: (token: string) => sessionStorage.setItem(TOKEN_KEY, token),
+  
+  // ID текущей попытки входа (для восстановления состояния при перезагрузке)
+  saveSessionId: (id: string) => sessionStorage.setItem(SESSION_KEY, id),
+  getSessionId: () => (typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_KEY) : null),
+  
+  clearAll: () => {
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+  },
+};
