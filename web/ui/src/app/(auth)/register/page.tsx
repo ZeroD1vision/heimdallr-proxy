@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useVisualStore } from '@/store/use-visual-store';
 import { authApi, tokenStorage } from '@/lib/api';
+import { AuthLayout, AuthCard, AuthButton } from '@/components/auth/auth-layout';
+import { FloatingInput } from '@/components/auth/floating-input';
 
 type RegisterStep = 'input' | 'awaiting_link' | 'success';
 
@@ -67,34 +69,31 @@ export default function RegisterPage() {
     <main className="min-h-screen flex items-center justify-center relative overflow-hidden">
       <AnimatePresence mode="wait">
         {step === 'input' && (
-          <motion.div 
-            key="input"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="z-10 w-full max-w-sm bg-black/40 backdrop-blur-2xl p-8 rounded-[2.5rem] border border-white/5"
-          >
-            <h1 className="font-syne font-black text-white text-xl uppercase mb-6 tracking-tighter text-center">
-              Create Entity
-            </h1>
-            <form onSubmit={handleRegister} className="space-y-4">
-              <input 
-                type="email" placeholder="EMAIL" required
-                className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 text-white outline-none focus:border-white/20 transition-all font-geist-mono text-sm"
-                value={email} onChange={e => setEmail(e.target.value)}
-              />
-              <input 
-                type="password" placeholder="PASSWORD" required
-                className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 text-white outline-none focus:border-white/20 transition-all font-geist-mono text-sm"
-                value={password} onChange={e => setPassword(e.target.value)}
-              />
-              <button 
-                disabled={isLoading}
-                className="w-full bg-white text-black font-syne font-black py-4 rounded-2xl uppercase text-[10px] tracking-[0.2em] hover:bg-zinc-200 transition-all"
-              >
-                {isLoading ? 'Processing...' : 'Initialize'}
-              </button>
-            </form>
+          <motion.div key="input" className="w-full max-w-[450px]">
+             <div className="mb-5 text-center">
+                <p className="text-[15px] uppercase tracking-[0.5em] text-white/50 mb-2">New Node</p>
+                <h1 className="font-jost text-4xl font-black uppercase tracking-[0.2em] text-white">Register</h1>
+             </div>
+
+             <AuthCard>
+              <div className="p-10 space-y-6">
+               <form onSubmit={handleRegister} className="space-y-10">
+                 <FloatingInput 
+                   label="Email" value={email} 
+                   onChange={e => setEmail(e.target.value)} 
+                   placeholder="USER@HEIMDALLR.LOCAL"
+                 />
+                 <FloatingInput 
+                   label="Password" type="password" value={password} 
+                   onChange={e => setPassword(e.target.value)} 
+                   placeholder="••••••••"
+                 />
+                 <AuthButton isLoading={isLoading} disabled={!email || !password}>
+                  Initialize Entity
+                </AuthButton>
+               </form>
+              </div>
+             </AuthCard>
           </motion.div>
         )}
 
