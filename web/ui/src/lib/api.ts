@@ -33,12 +33,51 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const text = await res.text(); // Читаем как текст, чтобы не было SyntaxError
+    console.warn(`[API] ${path} returned ${res.status}:`, text);
     throw new Error(text || `HTTP ${res.status}`);
   }
   const data = await res.json();
 
   return data as T;
 }
+
+// ── Auth API ──────────────────────────────────────────────────────────────────
+
+// ── Media API ────────────────────────────────────────────────────────────────
+
+export interface MediaAsset {
+  section: 'hero' | 'data' | 'auth';
+  url: string;
+  format?: string; // e.g., 'mp4', 'webm'
+  bitrate?: string; // e.g., '720p', '1080p'
+}
+
+export interface MediaConfig {
+  assets: MediaAsset[];
+  timestamp?: number;
+}
+
+export const mediaApi = {
+  /**
+   * Получить конфиг видео-ассетов для всех сцен.
+   * Бэк возвращает массив видеоресурсов с URL'ами.
+   * На фронте это становится источником истины для video paths.
+   * Чтобы менять видео быстро в продакшене — достаточно обновить конфиг на бэке, не трогая фронт.
+   * Пока не реализован соответствующий эндпоинт на бэке — возвращает 401 (вовзрат по умолчанию), MediaManager использует fallback пути.
+   */
+  getMediaConfig: () =>
+    request<MediaConfig>('/api/media/assets'),
+
+  /**
+   * Optional: Получить видео-ассет для конкретной сцены с учетом опций.
+   * Например, можно запрашивать разные видео для разных ролей/стран. 
+   * (пока не нужно, но может пригодиться)
+   */
+  getMediaForScene: (scene: 'hero' | 'data' | 'auth', opts?: { role?: string }) =>
+    request<MediaAsset>(`/api/media/assets/${scene}`, {
+      ...(opts && { body: JSON.stringify(opts) }),
+    }),
+};
 
 // ── Auth API ──────────────────────────────────────────────────────────────────
 
