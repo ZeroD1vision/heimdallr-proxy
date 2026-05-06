@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 
 type Scene = 'landing' | 'auth';
-type LoadingStage = 'hero' | 'transition' | 'data' | 'ready';
+type LoadingStage = 'hero' | 'transition' | 'data' | 'ready' | 'auth';
 
 interface VisualState {
   scene: Scene;
@@ -19,6 +19,7 @@ interface VisualState {
   videoElements: {
     hero: HTMLVideoElement | null;
     data: HTMLVideoElement | null;
+    auth: HTMLVideoElement | null;
   };
 
   // Методы
@@ -27,7 +28,7 @@ interface VisualState {
   setLoadProgress: (progress: number) => void;
   setScrollProgress: (progress: number) => void;
   setTransitionFrames: (frames: HTMLImageElement[]) => void;
-  setVideoElement: (section: 'hero' | 'data', el: HTMLVideoElement) => void;
+  setVideoElement: (section: 'hero' | 'data' | 'auth', el: HTMLVideoElement) => void;
 }
 
 export const useVisualStore = create<VisualState>() (
@@ -37,7 +38,7 @@ export const useVisualStore = create<VisualState>() (
     loadProgress: 0,
     scrollProgress: 0,
     transitionFrames: [],
-    videoElements: { hero: null, data: null },
+    videoElements: { hero: null, data: null, auth: null },
     sessionId: typeof window !== 'undefined' ? localStorage.getItem('h_session') : null,
     setSessionId: (id) => {
       if (id) localStorage.setItem('h_session', id);
