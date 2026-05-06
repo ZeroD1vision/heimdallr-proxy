@@ -14,21 +14,15 @@
  *   Все кадры грузятся параллельно на mount через Promise.all.
  *   Пока грузятся — canvas показывает анимированную заглушку.
  *   Когда загрузились — переключаемся на кадры.
+ * 
+ * TODO: Оптимизировать загрузку, 
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import Link from 'next/link';
-import { motion } from 'framer-motion';
-import { initGlobalLoading } from '@/lib/visual-orchestrator';
 import { useVisualStore } from '@/store/use-visual-store';
 
 // ── Конфиг кадров ─────────────────────────────────────────────────────────────
-const HERO_FRAMES = 121;
 const TRANSITION_FRAMES = 192;
-const DATA_FRAMES = 192;
-
-const framePath = (section: 'hero' | 'transition' | 'data', n: number) =>
-  `/assets/frames/${section}/frame_${String(n).padStart(4, '0')}.jpg`;
 
 // ── Scroll зоны ───────────────────────────────────────────────────────────────
 const HERO_VH = 1.0;
@@ -87,16 +81,6 @@ export default function LandingPage() {
   const heroUIRef = useRef<HTMLDivElement>(null);
   const dataUIRef = useRef<HTMLDivElement>(null);
 
-  // Загруженные кадры
-  const heroFrames = useRef<HTMLImageElement[]>([]);
-  const transFrames = useRef<HTMLImageElement[]>([]);
-  const dataFrames = useRef<HTMLImageElement[]>([]);
-  const framesReady = useRef(false);
-
-  // Прогресс загрузки для индикатора
-  // const [loadProgress, setLoadProgress] = useState(0);
-  // const [loaded, setLoaded] = useState(false);
-
   const loadProgress = useVisualStore((s) => s.loadProgress);
   const loaded = useVisualStore((s) => s.loadingStage === 'ready');
 
@@ -119,6 +103,10 @@ export default function LandingPage() {
   const lastT = useRef(0);
   const pts = useRef<Particle[]>([]);
   const geo = useRef({ W: 0, H: 0, heroHold: 0, transLen: 0 });
+  
+  // Кешируем градиент и состояние стора
+  const cachedGradient = useRef<CanvasGradient | null>(null);
+  const cachedStoreState = useRef<ReturnType<typeof useVisualStore.getState> | null>(null);
 
   // ── Setup ──────────────────────────────────────────────────────────────────
   const setup = useCallback(() => {
@@ -134,6 +122,9 @@ export default function LandingPage() {
       c.width = W;
       c.height = H;
     }
+    // Очищаем кеш градиента при resize
+    cachedGradient.current = null;
+    
     const p: Particle[] = [];
     for (let i = 0; i < 280; i++)
       p.push({
@@ -147,57 +138,6 @@ export default function LandingPage() {
       });
     pts.current = p;
   }, []);
-
-  // ── Загрузка кадров ────────────────────────────────────────────────────────
-  // const loadFrames = useCallback(async () => {
-  //   const total = HERO_FRAMES + TRANSITION_FRAMES + DATA_FRAMES;
-  //   let done = 0;
-
-  //   const load = (src: string): Promise<HTMLImageElement> =>
-  //     new Promise((res) => {
-  //       const img = new Image();
-  //       img.onload = () => {
-  //         done++;
-  //         setLoadProgress(Math.round((done / total) * 100));
-  //         res(img);
-  //       };
-  //       img.onerror = () => {
-  //         done++;
-  //         res(img);
-  //       }; // пропускаем битые кадры
-  //       img.src = src;
-  //     });
-
-  //   // Загружаем параллельно батчами по 20 чтобы не вешать сеть
-  //   const batch = async (srcs: string[]): Promise<HTMLImageElement[]> => {
-  //     const results: HTMLImageElement[] = [];
-  //     for (let i = 0; i < srcs.length; i += 20) {
-  //       const chunk = srcs.slice(i, i + 20);
-  //       results.push(...(await Promise.all(chunk.map(load))));
-  //     }
-  //     return results;
-  //   };
-
-  //   const [h, t, d] = await Promise.all([
-  //     batch(
-  //       Array.from({ length: HERO_FRAMES }, (_, i) => framePath('hero', i + 1))
-  //     ),
-  //     batch(
-  //       Array.from({ length: TRANSITION_FRAMES }, (_, i) =>
-  //         framePath('transition', i + 1)
-  //       )
-  //     ),
-  //     batch(
-  //       Array.from({ length: DATA_FRAMES }, (_, i) => framePath('data', i + 1))
-  //     ),
-  //   ]);
-
-  //   heroFrames.current = h;
-  //   transFrames.current = t;
-  //   dataFrames.current = d;
-  //   framesReady.current = true;
-  //   setLoaded(true);
-  // }, []);
 
   const snapActive = useRef(false);
 
@@ -237,53 +177,36 @@ export default function LandingPage() {
   }, []);
 
   const updateHint = (t: number) => {
+    // Обновляем шевроны только при скролле в transition section (t > 0)
+    // Иначе они просто имеют CSS анимацию и не меняются каждый фрейм
+    if (t <= 0) {
+      // Hero section — простая CSS анимация, не трогаем
+      return;
+    }
+    
     const el = hintRef.current;
     if (!el) return;
     const rise = t < 0.72 ? t / 0.72 : 1;
     const fly = t > 0.72 ? (t - 0.72) / 0.28 : 0;
 
-    if (t <= 0) {
-      // Idle — на месте
-      chevronRefs.current.forEach((r) => {
-        if (!r) return;
-        r.style.animationDuration = '2s';
-        r.style.transform = 'translateY(0)';
-        r.style.opacity = '1';
-        r.querySelector('polyline')?.setAttribute(
-          'stroke',
-          'rgb(255, 255, 255)'
-        );
-      });
-      const span = el.querySelector('span');
-      if (span) {
-        span.style.letterSpacing = '.44em';
-        span.style.opacity = '1';
-      }
-      el.style.transform = 'translateX(-50%) translateY(0px)';
-      el.style.opacity = '1';
-      el.style.letterSpacing = '.44em';
-      el.style.scale = '1';
-    } else if (t < 0.72) {
+    if (t < 0.72) {
       // Tension — тянется вверх пропорционально прогрессу
       chevronRefs.current.forEach((r, i) => {
         if (!r) return;
-        // Ускоряем анимацию и увеличиваем яркость пропорционально
-        const speed = 1 - rise * 0.6; // от 1s до 0.4s
+        const speed = 1 - rise * 0.6;
         const bright = 0.3 + rise * 0.5;
         r.style.animationDuration = `${speed}s`;
         r.querySelector('polyline')?.setAttribute(
           'stroke',
           `rgba(255,255,255,${bright})`
         );
-        // Смещаем вниз пропорционально индексу — эффект растяжения
-        // Раздвигаем в стороны + вниз — эффект расхождения
-        const side = (i - 1) * rise * 12; // левый летит влево, правый вправо, средний на месте
+        const side = (i - 1) * rise * 12;
         r.style.transform = `translateX(${side}px) translateY(${rise * (i + 1) * 4}px) scaleX(${1 + rise * 0.3})`;
         r.style.opacity = String(0.3 + rise * 0.6);
       });
-      const yUp = rise * 350; // px вверх от низа
-      const sc = 1 + rise * 0.3; // лёгкое растяжение
-      const op = 1 - rise * 0.2; // чуть тускнеет
+      const yUp = rise * 350;
+      const sc = 1 + rise * 0.3;
+      const op = 1 - rise * 0.2;
 
       el.style.transform = `translateX(-50%) translateY(-${yUp}px)`;
       el.style.opacity = String(op);
@@ -398,83 +321,56 @@ export default function LandingPage() {
     ctx.fillRect(0, 0, W, H);
 
     const ph = phase.current,
-      tp = transP.current;
+    tp = transP.current;
 
-    // if (useVisualStore.getState().loadingStage === 'ready') {
-    //   // ── FRAME MODE ──────────────────────────────────────────────────────
-    //   if (ph === 'hero') {
-    //     // Зацикленный hero: инкремент ~25fps
-    //     heroP.current += dt * 0.025;
-    //     const idx = Math.floor(heroP.current % HERO_FRAMES);
-    //     const img = heroFrames.current[idx];
-    //     if (img?.complete) ctx.drawImage(img, 0, 0, W, H);
-    //   } else if (ph === 'transition') {
-    //     // Скраб по scroll position
-    //     const idx = Math.min(
-    //       Math.round(tp * (TRANSITION_FRAMES - 1)),
-    //       TRANSITION_FRAMES - 1
-    //     );
-    //     const img = transFrames.current[idx];
-    //     if (img?.complete) ctx.drawImage(img, 0, 0, W, H);
+    // Кешируем состояние стора один раз за фрейм
+    cachedStoreState.current = useVisualStore.getState();
+    const storeState = cachedStoreState.current;
+    const { videoElements, transitionFrames } = storeState;
+    
+    let videoPlaying = false;
 
-    //     // Ambient particles поверх
-    //     particles(ctx, W, H, 0.25, p);
-    //   } else {
-    //     // Зацикленный data
-    //     dataP.current += dt * 0.025;
-    //     const idx = Math.floor(dataP.current % DATA_FRAMES);
-    //     const img = dataFrames.current[idx];
-    //     if (img?.complete) ctx.drawImage(img, 0, 0, W, H);
-    //   }
-    // } else {
-    //   // ── FALLBACK: canvas заглушка пока кадры грузятся ──────────────────
-    //   if (ph === 'hero' || (ph === 'transition' && tp < 0.5)) {
-    //     chromatic(ctx, W, H, 1, ts);
-    //     particles(ctx, W, H, 1, p);
-    //     horizLine(ctx, W, H, 1, ts);
-    //   } else {
-    //     grid(ctx, W, H, 1, ts);
-    //     chromatic(ctx, W, H, 0.38, ts);
-    //     particles(ctx, W, H, 0.44, p);
-    //     horizLine(ctx, W, H, 1.1, ts);
-    //   }
-    // }
-
-    if (useVisualStore.getState().loadingStage === 'ready') {
-      const { videoElements, transitionFrames } = useVisualStore.getState();
-
+    if (storeState.loadingStage === 'ready') {
       if (ph === 'hero') {
         const vid = videoElements.hero;
-        if (vid && vid.readyState >= 2) ctx.drawImage(vid, 0, 0, W, H);
+        if (vid && vid.readyState >= 2) {
+          ctx.drawImage(vid, 0, 0, W, H);
+          videoPlaying = true;
+        }
       } else if (ph === 'transition') {
         const idx = Math.min(Math.round(tp * (TRANSITION_FRAMES - 1)), TRANSITION_FRAMES - 1);
-        const img = transitionFrames[idx];  // ← из стора, не из локального ref
+        const img = transitionFrames[idx];
         if (img?.complete) ctx.drawImage(img, 0, 0, W, H);
         particles(ctx, W, H, 0.25, p);
       } else {
         const vid = videoElements.data;
-        if (vid && vid.readyState >= 2) ctx.drawImage(vid, 0, 0, W, H);
+        if (vid && vid.readyState >= 2) {
+          ctx.drawImage(vid, 0, 0, W, H);
+          videoPlaying = true;
+        }
       }
     }
 
-    // Горизонтальный градиент сверху/снизу
-    const tg = ctx.createLinearGradient(0, 0, 0, H);
-    tg.addColorStop(0, 'rgba(0,0,10,0.55)');
-    tg.addColorStop(0.12, 'transparent');
-    tg.addColorStop(0.88, 'transparent');
-    tg.addColorStop(1, 'rgba(0,0,10,0.65)');
-    ctx.fillStyle = tg;
-    ctx.fillRect(0, 0, W, H);
-
+    // Градиент фона: только если видео НЕ проигрывается
+    // (иначе лишняя анимация на уже хорошем видео)
+    if (!videoPlaying) {
+      if (!cachedGradient.current) {
+        cachedGradient.current = ctx.createLinearGradient(0, 0, 0, H);
+        cachedGradient.current.addColorStop(0, 'rgba(0,0,10,0.55)');
+        cachedGradient.current.addColorStop(0.12, 'transparent');
+        cachedGradient.current.addColorStop(0.88, 'transparent');
+        cachedGradient.current.addColorStop(1, 'rgba(0,0,10,0.65)');
+      }
+      ctx.fillStyle = cachedGradient.current;
+      ctx.fillRect(0, 0, W, H);
+    }
     requestAnimationFrame(render);
   }, []);
-
   // ── Mount ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     setup();
     applyScroll(window.scrollY);
     requestAnimationFrame(render);
-    initGlobalLoading();
 
     const onScroll = () => {
       // Инерция
@@ -889,7 +785,6 @@ export default function LandingPage() {
             pointerEvents: 'none',
           }}
         >
-          ✦
         </div>
       </div>
     </div>

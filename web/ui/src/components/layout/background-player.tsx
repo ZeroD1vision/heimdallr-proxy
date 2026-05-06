@@ -2,15 +2,14 @@
 import { useEffect, useRef } from 'react';
 import { useVisualStore } from '@/store/use-visual-store';
 
-const TRANSITION_FRAMES = 192;
-
 export default function BackgroundPlayer() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef = useRef<number>();
+  const canvasRef = useRef<HTMLCanvasElement>(null); // Реф для канваса, на котором рисуем видео-фон
+  const rafRef = useRef<number>(); // Реф для ID requestAnimationFrame
 
-  // Все данные из стора через ref — zero re-renders
+  // Все данные из стора через ref => не требуются ререндеры
   const stateRef = useRef(useVisualStore.getState());
 
+  // При монтировании подписываемся на изменения стора и обновляем ref с данными
   useEffect(() => {
     const unsub = useVisualStore.subscribe((s) => {
       stateRef.current = s;
@@ -18,6 +17,7 @@ export default function BackgroundPlayer() {
     return unsub;
   }, []);
 
+  // При монтировании получаем размер канваса и запускаем цикл отрисовки
   useEffect(() => {
     const handleResize = () => {
       const c = canvasRef.current;
@@ -51,29 +51,33 @@ export default function BackgroundPlayer() {
       let source: HTMLImageElement | HTMLVideoElement | null = null;
 
       if (scene === 'auth') {
-        // Auth — всегда data видео
-        const vid = videoElements.data;
+        // Auth — отдельное видео для страниц авторизации
+        const vid = videoElements.auth;
 
         if (vid && vid.readyState >= 2) source = vid;
       } else {
-        // Landing — логика по зонам скролла (идентично page.tsx логике)
+        // Landing — логика по зонам скролла (идентично page.tsx логике): 
+        // первые 15% — hero видео, 15-85% — transition покадрово для скролла, после 85% — data видео
         if (scrollProgress <= 0.15) {
           const vid = videoElements.hero;
           if (vid && vid.readyState >= 2) source = vid;
         } else if (scrollProgress > 0.15 && scrollProgress < 0.85) {
-          // Transition — покадровый скраб
+          // Transition — покадровая анимация, кадр выбирается в зависимости от scrollProgress
           if (transitionFrames.length > 0) {
             const idx = Math.round(scrollProgress * (transitionFrames.length - 1));
             source = transitionFrames[Math.min(idx, transitionFrames.length - 1)];
           }
         } else {
+          // Data — видео для нижней части лендинга
           const vid = videoElements.data;
           if (vid && vid.readyState >= 2) source = vid;
         }
       }
 
       if (source) {
-        // Cover-fit: сохраняем aspect ratio
+        // Если в источнике (видео или картинка) не пусто, рисуем, заполняя весь экран
+        // Для ресайзинга при отрисовке используем формулу масштабирования с сохранением пропорций:
+        // scale = max(W / srcW, H / srcH)
         const srcW = source instanceof HTMLVideoElement ? source.videoWidth : source.naturalWidth;
         const srcH = source instanceof HTMLVideoElement ? source.videoHeight : source.naturalHeight;
         if (srcW > 0 && srcH > 0) {
