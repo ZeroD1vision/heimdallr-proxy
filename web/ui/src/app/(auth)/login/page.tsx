@@ -5,8 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useVisualStore } from '@/store/use-visual-store';
 import { authApi, tokenStorage } from '@/lib/api';
-import { DigitBox } from '@/components/auth/digit-box';
-import { GlassPane, GlassPaneContent } from '@/components/ui/glass-pane';
+import { DigitBox, AuthCard, AuthButton } from '@/components/auth';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -48,38 +47,6 @@ const fadeScale = {
   exit:       { opacity: 0, scale: 1.03 },
   transition: { duration: 0.25, ease: 'easeOut' as const },
 };
-
-// ── AuthCard ──────────────────────────────────────────────────────────────────
-
-/**
- * AuthCard — стеклянная карточка по паттерну из navbar:
- *
- *   Слой 1 (z-0): GlassPane        — абсолютная подложка с мягким блюром, border, тень.
- *                                     Это "шторка" — она знает, что она absolute.
- *   Слой 2 (z-10): GlassPaneContent — relative-обёртка для контента поверх шторки,
- *                                     дополнительно усиленная backdrop-blur-3xl —
- *                                     ровно как центральное меню в navbar лежит
- *                                     поверх GlassPane с более сильным блюром.
- */
-function AuthCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="relative">
-      <div className="absolute -inset-0.5 bg-white/5 blur-2xl opacity-20 group-hover:opacity-30 transition duration-1000" />
-      {/* Фоновая шторка */}
-      <GlassPane 
-        className="inset-0 shadow-2xl" 
-        style={{ 
-          borderRadius: '24px',
-          backgroundColor: 'rgba(0, 0, 0, 0.4)'
-        }} 
-      />
-      {/* Контентный слой */}
-      <GlassPaneContent className="relative z-10">
-        {children}
-      </GlassPaneContent>
-    </div>
-  );
-}
 
 function FloatingInput({ 
   label, 
@@ -169,37 +136,25 @@ export default function LoginPage() {
 
   // ── Visual store — управление фоновой сценой ──────────────────────────────
 
+  // При монтировании устанавливаем сцену на 'auth' и пытаемся запустить видео.
   useEffect(() => {
     // Если уже есть токен — нечего тут делать
     if (tokenStorage.getToken()) {
-      router.replace('/auth/profile');
+      router.replace('/profile');
       return;
     }
-
     const store = useVisualStore.getState();
-    store.setScene('auth');
-    store.videoElements.data?.play().catch(() => {});
+    store.setScene('auth');  // Установка сцены для фонового видео
 
-    // Переключаем видео когда ресурс загрузится
-    const unsub = useVisualStore.subscribe(
-      (s) => s.loadingStage,
-      (stage) => {
-        if (stage === 'ready') {
-          useVisualStore.getState().videoElements.data?.play().catch(() => {});
-          unsub();
-        }
-      }
-    );
-
+    // По выходу после ререндеринга сбрасываем сцену на лендинг
     return () => {
-      unsub();
-      useVisualStore.getState().setScene('landing');
+      store.setScene('landing');
     };
   }, []);
 
   // ── State ─────────────────────────────────────────────────────────────────
 
-  const [step,      setStep     ] = useState<Step>('input');
+  const [step,      setStep     ] = useState<Step>('input'); // текущий шаг авторизации
   const [email,     setEmail    ] = useState('');
   const [password,  setPassword ] = useState('');
   const [tgLink,    setTgLink   ] = useState('');
@@ -428,16 +383,9 @@ export default function LoginPage() {
                     )}
                   </AnimatePresence>
                   
-                  <button
-                    type="submit"
-                    disabled={isLoading || !email || !password}
-                    className="w-full bg-white text-black font-syne font-black text-[11px]
-                      uppercase tracking-[0.3em] py-5 rounded-2xl mt-4
-                      hover:bg-zinc-200 transition-all duration-300
-                      disabled:opacity-20 shadow-[0_0_20px_rgba(255,255,255,0.1)]"
-                  >
-                    {isLoading ? 'Initializing...' : 'Initialize Entity'}
-                  </button>
+                  <AuthButton isLoading={isLoading} disabled={isLoading || !email || !password}>
+                    Initialize Entity
+                  </AuthButton>
                 </form>
               </div>
             </AuthCard>

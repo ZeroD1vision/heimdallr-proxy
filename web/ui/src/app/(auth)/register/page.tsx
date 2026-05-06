@@ -5,8 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useVisualStore } from '@/store/use-visual-store';
 import { authApi, tokenStorage } from '@/lib/api';
-import { AuthLayout, AuthCard, AuthButton } from '@/components/auth/auth-layout';
-import { FloatingInput } from '@/components/auth/floating-input';
+import { AuthCard, AuthButton, FloatingInput } from '@/components/auth';
 
 type RegisterStep = 'input' | 'awaiting_link' | 'success';
 
@@ -19,14 +18,23 @@ export default function RegisterPage() {
   const [tgLink, setTgLink] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Инициализация визуальной сцены (фон, видео)
+  // При монтировании устанавливаем сцену на 'auth' и пытаемся запустить видео.
   useEffect(() => {
+    // Если уже есть токен — нечего тут делать
+    if (tokenStorage.getToken()) {
+      router.replace('/profile');
+      return;
+    }
     const store = useVisualStore.getState();
     store.setScene('auth');
-    return () => store.setScene('landing');
+    // По выходу после ререндеринга сбрасываем сцену на лендинг
+    return () => {
+      store.setScene('landing');
+    };
   }, []);
 
-  // МАГИЯ: Поллинг статуса регистрации
+  // МАГИЯ для удобства пользователя: Поллинг статуса регистрации
+  // (но думаю это уязвимость для ботов сканеров)
   useEffect(() => {
     if (step !== 'awaiting_link' || !sessionId) return;
 
@@ -48,11 +56,12 @@ export default function RegisterPage() {
     return () => clearInterval(interval);
   }, [step, sessionId, router]);
 
+  // Обработчик отправки формы регистрации
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const res = await authApi.register(email, password);
+      const res = await authApi.register(email, password); // Запрос в API на регистрацию
       if (res.session_id && res.tg_link) {
         setSessionId(res.session_id);
         setTgLink(res.tg_link);
