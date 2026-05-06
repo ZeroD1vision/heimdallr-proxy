@@ -1,6 +1,5 @@
 'use client';
-import { useEffect, useRef } from 'react';
-import { useVisualStore } from '@/store/use-visual-store';
+import { useEffect } from 'react';
 import { initGlobalLoading } from '@/lib/visual-orchestrator';
 import BackgroundPlayer from '@/components/layout/background-player';
 

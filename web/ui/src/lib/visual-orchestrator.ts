@@ -1,25 +1,29 @@
 import { useVisualStore } from '@/store/use-visual-store';
-import { use } from 'react';
+import { mediaManager } from './media-manager';
 
 // ── Конфиг ────────────────────────────────────────────────────────────────────
 const TRANSITION_FRAMES = 192;
 const FRAME_PATH = (n: number) =>
   `/assets/frames/transition/frame_${String(n).padStart(4, '0')}.jpg`;
 
-// Выбираем качество видео по connection (если API доступен)
-function videoPath(section: 'hero' | 'data'): string {
+/**
+ * Выбираем качество видео по connection (если API доступен).
+ * Теперь использует mediaManager для получения URL из динамического конфига.
+ * Fallback на статический путь, если конфиг не загружен.
+ */
+function videoPath(section: 'hero' | 'data' | 'auth'): string {
   const conn = (navigator as any).connection;
   const slow = conn && (conn.saveData || conn.effectiveType === '2g' || conn.effectiveType === '3g');
-  const res = slow ? '720' : '720'; // На самом деле на 4к просто все лагает дико так что пока что 720
-  return `/assets/videos/${res}/${section}_section_animation_${res}.mp4`;
+  const quality = slow ? '720' : '720'; // На самом деле на 4к просто все лагает дико так что пока что 720
+
+  // Получаем URL через mediaManager (будет использован конфиг с бэка, если доступен)
+  return mediaManager.getVideoUrl(section, quality);
 }
 
-// Создаем кэш вне функции, чтобы он никогда не пересоздавался
-const videoCache: Record<string, HTMLVideoElement> = {};
 // ── loadVideo ─────────────────────────────────────────────────────────────────
 // Грузим видео и трекаем прогресс через buffered API
 function loadVideo(
-  section: 'hero' | 'data',
+  section: 'hero' | 'data' | 'auth',
   onProgress: (pct: number) => void
 ): Promise<HTMLVideoElement> {
   return new Promise((resolve, reject) => {
@@ -92,12 +96,21 @@ function loadTransitionFrames(
 export async function initGlobalLoading() {
   const store = useVisualStore.getState();
 
+  // ── Инициализируем MediaManager (загружаем конфиг с бэка для видеоресурсов) ──
+  // Это будет выполняться параллельно с загрузкой видео
+  // Если бэк недоступен, mediaManager будет использовать fallback пути
+  const mediaInitPromise = mediaManager.init().catch((err) => {
+    console.warn('[initGlobalLoading] MediaManager init failed, using fallbacks:', err);
+  });
+
   // Кеш-проверка: если всё уже загружено — ничего не делаем
   if (
     store.videoElements.hero &&
     store.videoElements.data &&
     store.transitionFrames.length > 0
   ) {
+    // Даже если кэш полон, ждём инициализации MediaManager
+    await mediaInitPromise;
     store.setLoadingStage('ready');
     store.setLoadProgress(100);
     return;
@@ -105,11 +118,11 @@ export async function initGlobalLoading() {
 
   // Веса для суммарного прогресса: hero 25% + transition 55% + data 20%
   // Потом подкрутим под реальные размеры файлов
-  const W = { hero: 0.25, transition: 0.55, data: 0.20 };
-  let heroP = 0, transP = 0, dataP = 0;
+  const W = { hero: 0.25, transition: 0.55, data: 0.10, auth: 0.10 };
+  let heroP = 0, transP = 0, dataP = 0, authP = 0;
 
   const pushProgress = () => {
-    const total = heroP * W.hero + transP * W.transition + dataP * W.data;
+    const total = heroP * W.hero + transP * W.transition + dataP * W.data + authP * W.auth;
     store.setLoadProgress(Math.round(total * 100));
   };
 
@@ -117,11 +130,6 @@ export async function initGlobalLoading() {
   store.setLoadingStage('hero');
   let heroVideo = store.videoElements.hero;
 
-  // Если hero уже кешировано — пропускаем
-  // Браузер (низший уровень) — качает байты видео и постоянно дергает событие onprogress.
-  // loadVideo (средний уровень) — ловит эти байты, пересчитывает их в проценты и вызывает ту функцию, которую в него передали под именем onProgress.
-  // Стрелочная функция (p) => { ... } (...) принимает процент p и тут же пинает pushProgress().
-  // pushProgress() (высший уровень) — собирает данные от всех видео сразу, суммирует их и говорит Zustand-стору обновить прогресс бар.
   if (!store.videoElements.hero) {
     heroVideo = await loadVideo('hero', (p) => {
       heroP = p;
@@ -158,11 +166,33 @@ export async function initGlobalLoading() {
   dataP = 1;
   pushProgress();
 
+  store.setLoadingStage('auth');
+  let authVideo = store.videoElements.auth;
+
+  if (!store.videoElements.auth) {
+    authVideo = await loadVideo('auth', (p) => {
+      authP = p;
+      pushProgress();
+    });
+    store.setVideoElement('auth', authVideo);
+  }
+  authP = 1;
+  pushProgress();
+
+  // ── Ждём инициализации MediaManager ───────────────────────────────────────
+  // Это гарантирует, что конфиг видеоресурсов загружен перед попаданием на auth
+  await mediaInitPromise;
+
   // ── Готово ────────────────────────────────────────────────────────────────
   store.setLoadingStage('ready');
   store.setLoadProgress(100);
 
+  // TODO: Разобраться с автоплеем, сейчас он работает но возможно запускает оба видео одновременно
   if (heroVideo) {
     heroVideo.play().catch(() => {});
+  }
+
+  if (authVideo) {
+    authVideo.play().catch(() => {});
   }
 }

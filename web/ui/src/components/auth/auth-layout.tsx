@@ -67,7 +67,21 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
     const store = useVisualStore.getState();
     store.setScene('auth');
     // Пытаемся запустить видео, если оно уже загружено
-    store.videoElements.data?.play().catch(() => {});
+    if (!store.videoElements.auth) {
+      // Если видео ещё нет в сторе, подписываемся и запускаем по загрузке
+      const unsub = useVisualStore.subscribe(
+        (s) => s.videoElements.auth,
+        (authVideo) => {
+          if (authVideo) {
+            authVideo.play().catch(() => {}); // Не может не удаваться, но на всякий случай ловим
+            unsub(); // отписываемся после первого срабатывания
+          }
+        }
+      );
+
+      return unsub; // отписка при размонтировании
+    }
+    store.videoElements.auth?.play().catch(() => {});
     
     return () => store.setScene('landing');
   }, []);
