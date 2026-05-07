@@ -11,7 +11,7 @@
 
 ### 2. Commit Message Standard (Conventional Commits)
 
-<type>(<scope>): <description>
+`<type>(<scope>): <description>`
 
 - All text must be in English.
 - Use imperative mood ("add", not "added").
