@@ -2,16 +2,12 @@
 
 import { useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useAnimate } from 'framer-motion';
 import { User, LogIn, UserPlus, Settings, LogOut } from 'lucide-react';
 import { Logo } from '@/components/ui/logo';
 import { GlassPane, GlassPaneContent } from '@/components/ui/glass-pane';
 import { usePathname, useRouter } from 'next/navigation';
 import { tokenStorage } from '@/lib/api';
-
-interface NavbarProps {
-  initialVariant?: 'public' | 'auth';
-}
 
 export default function Navbar() {
   const router = useRouter();
@@ -23,6 +19,7 @@ export default function Navbar() {
   const [userEmail, setUserEmail] = useState('');
   const [userBalance, setUserBalance] = useState('');
   const [activeTab, setActiveTab] = useState('about');
+  const [accountScope, animateAccount] = useAnimate();
   const navigation = {
     public: [
       { id: 'about', label: 'About', href: '#about' },
@@ -67,6 +64,31 @@ export default function Navbar() {
     };
   }, [pathname]);
 
+  // У пользователя не может быть возможности открыть и видеть аккаунт, 
+  // если он не авторизован, а он не авторизован, так как если был авторизован он бы не смог попасть на страницы (auth) 
+  // так что прячем кнопку и меню целиком.
+  const navigateToAuth = async (href: string) => {
+    
+    animateAccount(
+      accountScope.current,
+      { opacity: 0, x: 150, filter: 'blur(8px)' },
+      { duration: 0.35, ease: 'easeIn' },
+    );
+
+    router.push(href);
+  };
+
+  // Сброс когда уходим с auth обратно
+  useEffect(() => {
+    if (!isAuth && accountScope.current) {
+      animateAccount(
+        accountScope.current,
+        { opacity: 1, x: 0, filter: 'blur(0px)' },
+        { duration: 0.4, ease: 'easeOut' }
+      );
+    }
+  }, [isAuth]);
+
   const handleLogout = () => {
     tokenStorage.clearAll();
     setIsLoggedIn(false);
@@ -91,17 +113,17 @@ export default function Navbar() {
 
   return (
     <nav className="fixed top-6 left-0 w-full z-50 pointer-events-none">
-      <div className="max-w-[80%] font-syne mx-auto relative pointer-events-auto flex justify-between items-center px-4 py-2">
+      <div className="relative max-w-[80%] font-syne mx-auto pointer-events-auto flex justify-between items-center px-4 py-2">
         {/* Шторка — фоновый слой, знает что она absolute z-0 */}
-        <GlassPane
-          layout
-          animate={{
-            width: isSmall ? '400px' : '100%',
-            height: isSmall ? '48px' : '64px',
-            borderRadius: isSmall ? '24px' : '16px',
-          }}
-          className="left-1/2 -translate-x-1/2"
-        />
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+          <GlassPane
+            animate={{
+              width: isSmall ? '410px' : '100%',
+              height: isSmall ? '48px' : '64px',
+              borderRadius: isSmall ? '24px' : '16px',
+            }}
+          />
+        </div>
 
         {/* Логотип — контентный слой, GlassPaneContent даёт position: relative */}
         <GlassPaneContent
@@ -125,7 +147,7 @@ export default function Navbar() {
         {/* Центральное меню — абсолютный контейнер */}
         <div
           className="absolute left-1/2 -translate-x-1/2 flex items-center px-4 py-1 
-            bg-black/[0.3] border border-white/10 rounded-full backdrop-blur-3xl 
+            bg-zinc-950/[0.60] border border-[#928989]/30 rounded-full backdrop-blur-2xl 
             backdrop-saturate-[180%] shadow-2xl z-10"
         >
           <div className="flex text-[12px] items-center font-bold uppercase tracking-[0.25em] relative">
@@ -138,7 +160,7 @@ export default function Navbar() {
                   className={`px-6 py-1 transition-colors duration-500 relative z-10 ${
                     activeTab === tab.id
                       ? 'text-white'
-                      : 'text-zinc-500 hover:text-zinc-300'
+                      : 'text-[#a1a1aa] hover:text-zinc-100'
                   }`}
                 >
                   {/* Текст ссылки */}
@@ -151,7 +173,7 @@ export default function Navbar() {
                       transition={{
                         type: 'spring',
                         stiffness: 380,
-                        damping: 30,
+                        damping: 28,
                       }}
                       className="absolute inset-0 bg-white/10 rounded-full border border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.1)] z-10"
                     />
@@ -163,13 +185,23 @@ export default function Navbar() {
         </div>
 
         {/* Аккаунт — контентный слой */}
+        <div ref={accountScope}>
         <GlassPaneContent
           as={motion.div}
+          initial={{ opacity: 0, x: 50, filter: 'blur(10px)' }} // Появляется справа
+          animate={{ 
+            x: isSmall ? '10vw' : 0,
+            opacity: isAuth ? 0 : 1,
+            filter: 'blur(0px)',
+          }}
+          transition={{ 
+            type: 'spring', 
+            stiffness: 150,
+            damping: 25 
+          }}
           className="group"
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
-          animate={{ x: isSmall ? '10vw' : 0 }}
-          transition={{ type: 'spring', stiffness: 150, damping: 25 }}
         >
           <motion.div
             animate={{
@@ -232,8 +264,14 @@ export default function Navbar() {
                       </>
                     ) : (
                       <>
-                        <AccountLink href="/login" icon={<LogIn size={14} />} label="Authorize" />
-                        <AccountLink href="/register" icon={<UserPlus size={14} />} label="Initialize" />
+                        <button onClick={() => navigateToAuth('/login')}
+                          className="flex items-center gap-3 px-3 py-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-sm w-full">
+                          <LogIn size={14} /> Authorize
+                        </button>
+                        <button onClick={() => navigateToAuth('/register')}
+                          className="flex items-center gap-3 px-3 py-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-sm w-full">
+                          <UserPlus size={14} /> Initialize
+                        </button>
                       </>
                     )}
                   </div>
@@ -242,6 +280,7 @@ export default function Navbar() {
             )}
           </AnimatePresence>
         </GlassPaneContent>
+        </div>
       </div>
     </nav>
   );
