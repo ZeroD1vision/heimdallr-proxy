@@ -6,11 +6,13 @@ import { useRouter } from 'next/navigation';
 import { useVisualStore } from '@/store/use-visual-store';
 import { authApi, tokenStorage } from '@/lib/api';
 import { AuthCard, AuthButton, FloatingInput } from '@/components/auth';
+import { useNotify, NotificationPresets } from '@/hooks/use-notify';
 
 type RegisterStep = 'input' | 'awaiting_link' | 'success';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { notify } = useNotify();
   const [step, setStep] = useState<RegisterStep>('input');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,6 +46,7 @@ export default function RegisterPage() {
         // Если статус стал APPROVED, значит бот привязал TG и активировал WebUser
         if (res.status === 'APPROVED' && res.token) {
           tokenStorage.setToken(res.token);
+          notify(NotificationPresets.success('Node activated. Redirecting...', 'auth_success'));
           setStep('success');
           clearInterval(interval);
           setTimeout(() => router.push('/dashboard'), 1500);
@@ -66,9 +69,10 @@ export default function RegisterPage() {
         setSessionId(res.session_id);
         setTgLink(res.tg_link);
         setStep('awaiting_link');
+        notify(NotificationPresets.info('Check Telegram for activation link'));
       }
     } catch (err) {
-      alert("Registration error. This email might be taken.");
+      notify(NotificationPresets.error('Email already taken', 'auth_error'));
     } finally {
       setIsLoading(false);
     }
@@ -136,6 +140,7 @@ export default function RegisterPage() {
           </motion.div>
         )}
 
+        { /* Скорее всего уберем потому что notify уже показывает успех, но пусть пока будет для полноты */ }
         {step === 'success' && (
           <motion.div 
             key="success"

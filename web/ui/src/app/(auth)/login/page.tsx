@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useVisualStore } from '@/store/use-visual-store';
 import { authApi, tokenStorage } from '@/lib/api';
 import { DigitBox, AuthCard, AuthButton } from '@/components/auth';
+import { useNotify, NotificationPresets } from '@/hooks/use-notify';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -133,6 +134,7 @@ function FloatingInput({
 
 export default function LoginPage() {
   const router = useRouter();
+  const { notify } = useNotify();
 
   // ── Visual store — управление фоновой сценой ──────────────────────────────
 
@@ -187,13 +189,15 @@ export default function LoginPage() {
           if (res.status === 'APPROVED' && res.token) {
             stopPolling();
             tokenStorage.setToken(res.token);
+            notify(NotificationPresets.success('Identity confirmed. Redirecting...', 'auth_success'));
             await triggerAutoType(autoCode.current || '000000');
           }
 
           if (res.status === 'EXPIRED') {
             stopPolling();
             setErrorMsg('Session expired. Please try again.');
-            setStep('error');
+            notify(NotificationPresets.error('Session expired — try again', 'auth_error'));
+            setStep('input');
           }
         } catch {
           // Сетевой сбой — пропускаем тик, не ломаем сессию
@@ -221,7 +225,6 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setErrorMsg('');
 
     try {
       const res = await authApi.login(email, password);
@@ -242,7 +245,7 @@ export default function LoginPage() {
         startPolling(res.session_id);
       }
     } catch (e: any) {
-      setErrorMsg(e.message || 'Authorization failed');
+      notify(NotificationPresets.error('Invalid credentials', 'auth_error'));
     } finally {
       setIsLoading(false);
     }
@@ -296,10 +299,11 @@ export default function LoginPage() {
       if (res.token) {
         stopPolling();
         tokenStorage.setToken(res.token);
+        notify(NotificationPresets.success('Identity confirmed. Redirecting...', 'auth_success'));
         await triggerAutoType(finalCode);
       }
     } catch (e: any) {
-      setErrorMsg(e.message || 'Invalid code');
+      notify(NotificationPresets.error('Invalid verification code', 'auth_error'));
     } finally {
       setIsLoading(false);
     }
