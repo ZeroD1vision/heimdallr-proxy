@@ -100,31 +100,6 @@ export function GlassPane({ className = '', ...motionProps }: GlassPaneProps) {
         }}
       />
 
-      {/* ── Хроматическая аберрация: Red-канал (сдвиг влево) ──
-          Реальное стекло рассеивает длины волн по-разному.
-          mix-blend-screen + translateX(-1.5px) имитирует красный канал,
-          смещённый относительно зелёного. opacity: 50% — тонкий эффект. */}
-      <div
-        className="absolute inset-0 z-[-1] pointer-events-none opacity-50 mix-blend-screen rounded-[inherit]"
-        style={{
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          clipPath: 'inset(0 1px 0 0)',
-          transform: 'translateX(-1.5px)',
-        }}
-      />
-
-      {/* ── Хроматическая аберрация: Blue/Cyan-канал (сдвиг вправо) ── */}
-      <div
-        className="absolute inset-0 z-[-1] pointer-events-none opacity-50 mix-blend-screen rounded-[inherit]"
-        style={{
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          clipPath: 'inset(0 0 0 1px)',
-          transform: 'translateX(1.5px)',
-        }}
-      />
-
       {/* ── Green/Luminance: основной blur-слой ──
           Центральный (нейтральный) канал — даёт основной матовый эффект
           без цветового смещения. bg-white/[0.03] добавляет минимальную белизну. */}
