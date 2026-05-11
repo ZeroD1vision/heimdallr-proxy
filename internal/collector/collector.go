@@ -27,7 +27,8 @@ type XrayClient interface {
 // PresenceStore — минимальный контракт кэша online/offline статусов.
 // Коллектор пишет в этот кэш после каждой попытки опроса Xray.
 type PresenceStore interface {
-	Set(email string, online bool)
+	SetStats(email string, uplink, downlink int64)
+	IsOnline(email string) bool
 }
 
 type Collector struct {
@@ -88,15 +89,15 @@ func (c *Collector) tick(ctx context.Context) {
 
 		stats, err := c.xray.GetUserStats(ctx, user.Email)
 		if err != nil {
-			if c.presence != nil {
-				c.presence.Set(user.Email, false)
-			}
-			// Ошибка одного пользователя не останавливает остальных.
+			// Ошибка при получении stats — нет информации об активности
+			// Оставляем lastActivity как была, IsOnline проверит timeout
 			slog.Error("collector: failed to fetch stats from Xray API", "email", user.Email, "error", err)
 			continue
 		}
+
+		// Обновляем статистику и автоматически меняем online/offline на основе прироста трафика
 		if c.presence != nil {
-			c.presence.Set(user.Email, true)
+			c.presence.SetStats(user.Email, stats.Uplink, stats.Downlink)
 		}
 
 		// Лимит: Downlink + Uplink
