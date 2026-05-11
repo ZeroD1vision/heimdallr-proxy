@@ -43,6 +43,7 @@ export function AuthCard({ children }: AuthCardProps) {
       <GlassPane
         className="inset-0 shadow-2xl"
         style={{
+          overflow: "hidden",
           borderRadius: '24px',
           // Полупрозрачный чёрный фон усиливает читаемость контента на видео-фоне.
           backgroundColor: 'rgba(0, 0, 0, 0.4)',
