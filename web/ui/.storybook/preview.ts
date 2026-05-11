@@ -3,6 +3,10 @@ import '../src/app/globals.css';
 
 const preview: Preview = {
   parameters: {
+    nextjs: {
+      appDirectory: true,  // говорит что используем App Router
+    },
+
     controls: {
       matchers: {
         color: /(background|color)$/i,
