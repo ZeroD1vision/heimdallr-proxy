@@ -6,6 +6,7 @@ import './globals.css';
 import Navbar from '@/components/layout/navbar';
 import Slider from '@/components/layout/scrollbar';
 import ClientShell from '@/components/layout/client-shell';
+import { NotificationProvider } from '@/components/layout/notification-provider';
 
 const syne = localFont({
   src: '../../public/fonts/syne-v24-latin-regular.woff2',
@@ -48,9 +49,11 @@ export default function RootLayout({
       </head>
       <body className="bg-void text-white antialiased">
         <ClientShell />
-        <Navbar />
+        <NotificationProvider>
+          <Navbar />
+          {children}
+        </NotificationProvider>
         <Slider />
-        {children}
       </body>
     </html>
   );

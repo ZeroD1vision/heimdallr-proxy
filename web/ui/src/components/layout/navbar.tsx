@@ -1,5 +1,21 @@
 'use client';
 
+/**
+ * @file navbar.tsx
+ * @description Навбар с интегрированным островом уведомлений.
+ *
+ * Состояния уведомлений управляют геометрией GlassPane:
+ *   idle        → обычный остров (маленькая таблетка или большая полоса в зависимости от скролла/маршрута)
+ *   expanding   → остров растёт: сначала ширина (+ширина содержимого уведомления), затем высота
+ *   visible     → остров остаётся раскрытым, NotificationBubble рендерится внутри
+ *   changing    → NotificationBubble меняет содержимое (этим управляет AnimatePresence)
+ *   shrinking   → остров возвращается в исходную форму
+ *
+ * Постоянные уведомления оставляют иконку в стеке, который расширяет остров влево.
+ * Левое расширение анимируется отдельно от основной ширины острова.
+ */
+ 
+
 import { useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence, useAnimate } from 'framer-motion';
@@ -8,7 +24,44 @@ import { Logo } from '@/components/ui/logo';
 import { GlassPane, GlassPaneContent } from '@/components/ui/glass-pane';
 import { usePathname, useRouter } from 'next/navigation';
 import { tokenStorage } from '@/lib/api';
+import {
+  useNotificationState,
+  useNotificationCurrent,
+  useNotificationOrigin,
+  useNotificationActor,
+} from '@/store/use-notification-machine';
+import { NotificationBubble } from '@/components/ui/notification-bubble';
+import { PersistentStack } from '@/components/ui/persistent-stack';
+import { usePersistentStack } from '@/store/use-persistent-stack';
 
+
+// ─── Геометрия острова ────────────────────────────────────────────────────────
+// Эти значения управляют пропом animate GlassPane.
+// Все измерения предусмотрены — изменяйте здесь, а не в JSX.
+ 
+const ISLAND = {
+  // Обычное состояние
+  small: { width: '410px', height: '48px', borderRadius: '24px' },
+  large: { width: '100%', height: '64px', borderRadius: '16px' },
+ 
+  // Раскрытое состояние уведомления
+  // Вспухает вниз: ширина не меняется, высота растёт
+  notif: { width: '410px', height: '128px', borderRadius: '24px' },
+} as const;
+
+function halfHeightOffset(height: string) {
+  return `calc(50% - ${parseInt(height, 10) / 2}px)`;
+}
+
+const ISLAND_TOP = {
+  small: halfHeightOffset(ISLAND.small.height), // calc(50% - 24px)
+  large: halfHeightOffset(ISLAND.large.height), // calc(50% - 32px)
+} as const;
+ 
+// Ширина расширения стека постоянных элементов (левая сторона острова).
+// Вычисляется динамически на основе количества элементов в компоненте PersistentStack.
+const STACK_EXTENSION_WIDTH = 48; // px, приблизительно
+ 
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
@@ -20,6 +73,22 @@ export default function Navbar() {
   const [userBalance, setUserBalance] = useState('');
   const [activeTab, setActiveTab] = useState('about');
   const [accountScope, animateAccount] = useAnimate();
+  
+    // ─── Машина уведомлений ────────────────────────────────────────────────────
+  const notifState = useNotificationState();
+  const currentNotif = useNotificationCurrent();
+  const notifActor = useNotificationActor();
+  const persistentItemCount = usePersistentStack((s) => s.items.length);
+ 
+  const notifOrigin = useNotificationOrigin();
+  const isNotifActive =
+    notifState === 'expanding' ||
+    notifState === 'visible' ||
+    notifState === 'changing';
+
+    console.log('[Navbar] Rendered, notifState =', notifState);
+ 
+  // ─── Настройка навигации ────────────────────────────────────────────────────
   const navigation = {
     public: [
       { id: 'about', label: 'About', href: '#about' },
@@ -41,9 +110,10 @@ export default function Navbar() {
   const currentTabs = navigation[variant];
   const isSmall = variant === 'auth' || isScrolled;
 
+  // ─── Синхронизация активной табы ──────────────────────────────────────────
   useEffect(() => {
-    // Ищем элемент, чей href совпадает с текущим путем
-    // Использование .startsWith() поможет, если появятся вложенные роуты
+    // Ищем элемент, чей href совпадает с текущим путём
+    // Использование .startsWith() поможет, если появятся вложенные маршруты
     const currentTab = allNavigationItems.find(tab => 
       pathname === tab.href || (tab.href !== '/' && pathname.startsWith(tab.href))
     );
@@ -53,20 +123,21 @@ export default function Navbar() {
     }
   }, [pathname]);
 
+  // ─── Состояние авторизации ───────────────────────────────────────────────
   useEffect(() => {
     const token = tokenStorage.getToken();
     setIsLoggedIn(!!token);
-    // В идеале тут должен быть вызов authApi.getMe() для получения данных профиля
-    // Но для простоты сейчас просто хардкодим email при наличии токена
+    // В идеале здесь должен быть вызов authApi.getMe() для получения данных профиля
+    // Но для простоты сейчас просто жёсткокодим email при наличии токена
     if (token) {
       setUserBalance('1,240.00 ᚱ'); // Заглушка для баланса
       setUserEmail('artemiy@heimdallr.local')
     };
   }, [pathname]);
 
-  // У пользователя не может быть возможности открыть и видеть аккаунт, 
-  // если он не авторизован, а он не авторизован, так как если был авторизован он бы не смог попасть на страницы (auth) 
-  // так что прячем кнопку и меню целиком.
+  // Пользователь не может иметь возможности открыть и видеть аккаунт, 
+  // если он не авторизован, а он не авторизован, так как если бы был авторизован, не смог бы попасть на страницы (auth) 
+  // поэтому прячем кнопку и меню целиком.
   const navigateToAuth = async (href: string) => {
     
     animateAccount(
@@ -78,7 +149,7 @@ export default function Navbar() {
     router.push(href);
   };
 
-  // Сброс когда уходим с auth обратно
+  // Сброс, когда уходим с auth обратно
   useEffect(() => {
     if (!isAuth && accountScope.current) {
       animateAccount(
@@ -111,18 +182,108 @@ export default function Navbar() {
     timeoutRef.current = setTimeout(() => setIsAccountOpen(false), 150);
   };
 
+  const currentTop = isNotifActive 
+  ? ISLAND_TOP[notifOrigin] // Берем из машины (small или large)
+  : (isSmall ? ISLAND_TOP.small : ISLAND_TOP.large);
+
+  // ─── Определение геометрии острова ────────────────────────────────────────
+  // Определяем базовую (до-уведомления) форму.
+  const baseShape = isSmall ? ISLAND.small : ISLAND.large;
+ 
+  // Когда уведомление активно, переопределяем ширину и высоту.
+  // Остров растёт вправо для ephemeral, расширение влево для persistent
+  // обрабатывается компонентом PersistentStack, позиционированным абсолютно слева.
+  const islandAnimate = {
+    ...(isNotifActive ? ISLAND.notif : (isSmall ? ISLAND.small : ISLAND.large)),
+    top: currentTop, // Привязываем верх к расчетной линии центра
+  };
+ 
+  // Сигнал ANIMATION_END: срабатывает, когда остров завершает расширение или сжатие.
+  // Мы используем onAnimationComplete на элементе motion GlassPane.
+  const handleIslandAnimationComplete = () => {
+    const state = notifState;
+    if (state === 'expanding' || state === 'shrinking') {
+      notifActor.send({ type: 'ANIMATION_END' });
+    }
+  };
+
+  // ─── Обработчик закрытия ──────────────────────────────────────────────────
+  const handleDismiss = () => {
+    notifActor.send({ type: 'DISMISS' });
+  };
+
   return (
     <nav className="fixed top-6 left-0 w-full z-50 pointer-events-none">
       <div className="relative max-w-[80%] font-syne mx-auto pointer-events-auto flex justify-between items-center px-4 py-2">
-        {/* Шторка — фоновый слой, знает что она absolute z-0 */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+        {/* ─── Стеклянный остров ────────────────────────────────────────────────────── */}
+        {/*
+          Примечание структуры: остров имеет position:absolute, центрирован.
+          Стек постоянных элементов находится прямо слева от него, также absolute.
+          Оба обёрнуты в относительный контейнер для выравнивания.
+        */}
+        <div className="absolute inset-0 flex justify-center pointer-events-none z-0">
+ 
+          {/* Стек постоянных элементов — левое расширение */}
+          <AnimatePresence>
+            {persistentItemCount > 0 && (
+              <motion.div
+                initial={{ opacity: 0, x: 12, width: 0 }}
+                animate={{ opacity: 1, x: 0, width: STACK_EXTENSION_WIDTH }}
+                exit={{ opacity: 0, x: 12, width: 0 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+                className="relative z-10 pointer-events-auto flex items-center justify-end pr-2"
+                style={{ height: islandAnimate.height }}
+              >
+                <PersistentStack visible={isNotifActive} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+ 
+          {/* Основной стеклянный остров */}
           <GlassPane
-            animate={{
-              width: isSmall ? '410px' : '100%',
-              height: isSmall ? '48px' : '64px',
-              borderRadius: isSmall ? '24px' : '16px',
-            }}
-          />
+            style={{ position: 'relative' }}
+            animate={islandAnimate}
+            transition={{ type: 'spring', stiffness: 200, damping: 30 }}
+            onAnimationComplete={handleIslandAnimationComplete}
+          >
+          </GlassPane>
+
+          {/* Пузырь уведомления — рендерится внутри острова, когда активен */}
+          <AnimatePresence>
+            {isNotifActive && (
+              <motion.div
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                className="absolute left-1/2 -translate-x-1/2 flex justify-center pointer-events-auto overflow-hidden"
+                style={{
+                  width: islandAnimate.width,
+                  height: islandAnimate.height,
+                  borderRadius: islandAnimate.borderRadius,
+                  top: islandAnimate.top,
+                  zIndex: 1,
+                  originX: 0.5,
+                }}
+              >
+                { /*Без этого контейнера длина опередляалсь по ближайшему relative - Navbar, а не по 
+                острову и длина была как у Navbar, а это почти весь экран и переопределение width 
+                в motion.div не помогало. */}
+                <div 
+                  className="relative h-full overflow-hidden" 
+                  style={{ 
+                    width: islandAnimate.width,
+                    borderRadius: islandAnimate.borderRadius 
+                  }}
+                >
+                  <NotificationBubble
+                    notification={currentNotif}
+                    onDismiss={handleDismiss}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Логотип — контентный слой, GlassPaneContent даёт position: relative */}
