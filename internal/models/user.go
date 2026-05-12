@@ -12,9 +12,9 @@ import (
 // UUID генерируется автоматически на стороне бэкенда (BeforeCreate),
 // чтобы исключить доверие к внешнему вводу.
 type User struct {
-	ID           uint       `json:"id"             gorm:"primaryKey"`
-	Email        string     `json:"email"          gorm:"uniqueIndex;not null"`
-	TelegramID   *int64     `json:"telegram_id"    gorm:"uniqueIndex"`
+	ID         uint   `json:"id"             gorm:"primaryKey"`
+	Email      string `json:"email"          gorm:"uniqueIndex;not null"`
+	TelegramID *int64 `json:"telegram_id"    gorm:"uniqueIndex"`
 	// UUID хранится в legacy-совместимой колонке xray_uuid.
 	// Это позволяет обновлять сервис без ручного rename колонки на проде.
 	UUID         string     `json:"uuid"           gorm:"column:xray_uuid;uniqueIndex;not null"`

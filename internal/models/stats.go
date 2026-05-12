@@ -28,11 +28,11 @@ type UserStats struct {
 // Таблица растёт со временем — это временной ряд.
 // Email здесь просто index (не uniqueIndex) — у одного пользователя много записей.
 type UserHistory struct {
-	ID        uint      `json:"id"          gorm:"primaryKey"`
-	Email     string    `json:"email"       gorm:"index;not null"`
-	Downlink  int64     `json:"downlink_bytes"`
-	Uplink    int64     `json:"uplink_bytes"`
-	
+	ID       uint   `json:"id"          gorm:"primaryKey"`
+	Email    string `json:"email"       gorm:"index;not null"`
+	Downlink int64  `json:"downlink_bytes"`
+	Uplink   int64  `json:"uplink_bytes"`
+
 	ActiveConns int  `json:"active_conns"`
 	IsBlocked   bool `json:"is_blocked"`
 

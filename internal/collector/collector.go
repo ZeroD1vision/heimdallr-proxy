@@ -1,3 +1,5 @@
+// Package collector объединяет сбор живой статистики, запись истории и принятие решения о блокировке.
+// Его задача — регулярно опрашивать Xray, обновлять presence-кэш и при необходимости ставить задачи в pipeline.
 package collector
 
 import (
@@ -8,7 +10,7 @@ import (
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
 )
 
-// CollectorStore — всё что коллектору нужно от хранилища.
+// CollectorStore описывает только те операции хранилища, которые нужны коллектору в ежедневном цикле.
 // Объединяем в один интерфейс намеренно: оба метода работают с БД,
 // это одна сущность с точки зрения коллектора.
 // GetAllUsers вызывается каждый тик — список всегда актуален,
@@ -18,14 +20,14 @@ type CollectorStore interface {
 	SaveHistory(ctx context.Context, history *models.UserHistory) error
 }
 
-// XrayClient остаётся отдельным интерфейсом — это другая сущность (сетевой клиент),
-// он может быть недоступен пока Store работает нормально.
+// XrayClient остаётся отдельным интерфейсом, потому что это другая подсистема: сетевой клиент к Xray.
+// Store может быть доступен даже тогда, когда Xray временно недоступен, и наоборот.
 type XrayClient interface {
 	GetUserStats(ctx context.Context, email string) (models.UserStats, error)
 	AddUser(ctx context.Context, user models.User) error
 }
 
-// PresenceStore — минимальный контракт кэша online/offline статусов.
+// PresenceStore — минимальный контракт для кэша online/offline статусов и текущих счетчиков трафика.
 // Коллектор пишет в этот кэш после каждой попытки опроса Xray.
 type PresenceStore interface {
 	SetStats(email string, uplink, downlink int64)
@@ -40,6 +42,8 @@ type Collector struct {
 	interval time.Duration
 }
 
+// NewCollector собирает фоновый job, который раз в interval опрашивает Xray и синхронизирует состояние.
+// Пайплайн передаётся внутрь, чтобы решения о блокировке не выполнялись в тике синхронно.
 // NewCollector создаёт экземпляр сборщика.
 // Он принимает pipeline — это наша точка входа в асинхронную обработку.
 // Мы не блокируем основной цикл сбора (tick) тяжелыми операциями блокировки,
@@ -54,6 +58,8 @@ func NewCollector(store CollectorStore, xray XrayClient, presence PresenceStore,
 	}
 }
 
+// Run запускает бесконечный цикл тика до отмены контекста.
+// Это фоновый процесс, который нельзя вызвать дважды без понимания, что будет два независимых опроса.
 // Run запускает коллектор. Блокирует до отмены ctx.
 // Вызывать: go collector.Run(ctx)
 func (c *Collector) Run(ctx context.Context) {
@@ -73,6 +79,8 @@ func (c *Collector) Run(ctx context.Context) {
 	}
 }
 
+// tick выполняет один полный проход по всем пользователям: читает БД, опрашивает Xray,
+// обновляет presence-кэш, пишет историю и при необходимости ставит задачу на блокировку.
 // tick — один цикл сбора
 // В том числе делегируем задачи по блокировке пользователей в pipeline
 func (c *Collector) tick(ctx context.Context) {

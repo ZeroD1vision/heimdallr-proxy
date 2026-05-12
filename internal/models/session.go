@@ -41,11 +41,11 @@ const (
 // Поле OTPCode заполняется только для SessionKindLogin2FA —
 // при регистрации код не нужен, достаточно факта нажатия START в боте.
 type AuthSession struct {
-	ID         string        `json:"id"           gorm:"primaryKey;type:text"`
-	WebUserID  uint          `json:"web_user_id"  gorm:"index;not null"`
-	Kind       SessionKind   `json:"kind"         gorm:"not null"`
-	OTPCode    string        `json:"-"            gorm:"default:''"` // только для LOGIN_2FA; не сериализуется
-	Status     SessionStatus `json:"status"       gorm:"index;not null;default:'PENDING'"`
-	ExpiresAt  time.Time     `json:"expires_at"   gorm:"not null"`
-	CreatedAt  time.Time     `json:"created_at"`
+	ID        string        `json:"id"           gorm:"primaryKey;type:text"`
+	WebUserID uint          `json:"web_user_id"  gorm:"index;not null"`
+	Kind      SessionKind   `json:"kind"         gorm:"not null"`
+	OTPCode   string        `json:"-"            gorm:"default:''"` // только для LOGIN_2FA; не сериализуется
+	Status    SessionStatus `json:"status"       gorm:"index;not null;default:'PENDING'"`
+	ExpiresAt time.Time     `json:"expires_at"   gorm:"not null"`
+	CreatedAt time.Time     `json:"created_at"`
 }

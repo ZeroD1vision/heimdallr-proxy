@@ -1,3 +1,6 @@
+// Package main собирает весь backend в один процесс: HTTP API, Telegram-бот,
+// фоновый коллектор статистики, очередь enforcement-задач и подключение к Xray.
+// Этот файл — точка композиции зависимостей и единственное место, где читаются env-переменные.
 package main
 
 import (
@@ -126,16 +129,16 @@ func main() {
 		cfg.apiKey,
 		cfg.jwtSecret,
 		cfg.adminEmail,
-		xrayClient,  // StatsProvider
-	    store,       // HistoryProvider
-	    store,       // UserStore
+		xrayClient, // StatsProvider
+		store,      // HistoryProvider
+		store,      // UserStore
 		store,      // реализует WebUserStore, AuthSessionStore и т.д.
-	    xrayClient,  // XrayUserManager
-	    presence,    // PresenceProvider
-	    store,       // OTPStore
-	    store,       // SessionStore
-	    tgBot,       // Notifier
-	    cfg.staticDir,
+		xrayClient, // XrayUserManager
+		presence,   // PresenceProvider
+		store,      // OTPStore
+		store,      // SessionStore
+		tgBot,      // Notifier
+		cfg.staticDir,
 	)
 
 	// -------------------------------------------------------------------------
@@ -157,18 +160,18 @@ func main() {
 	go statsCollector.Run(collectorCtx)
 
 	go func() {
-	    ticker := time.NewTicker(5 * time.Minute)
-	    defer ticker.Stop()
-	    for {
-	        select {
-	        case <-ticker.C:
-	            if err := store.DeleteExpiredSessions(context.Background()); err != nil {
-	                slog.Warn("failed to clean expired sessions", "error", err)
-	            }
-	        case <-collectorCtx.Done():
-	            return
-	        }
-	    }
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := store.DeleteExpiredSessions(context.Background()); err != nil {
+					slog.Warn("failed to clean expired sessions", "error", err)
+				}
+			case <-collectorCtx.Done():
+				return
+			}
+		}
 	}()
 
 	go tgBot.Start()
@@ -218,6 +221,8 @@ type config struct {
 	staticDir       string
 }
 
+// loadConfig централизованно собирает runtime-настройки процесса.
+// Здесь намеренно сосредоточены все env-переменные, чтобы остальной код оставался детерминированным и тестируемым.
 func loadConfig() config {
 	adminIDStr := getEnv("TG_ADMIN_ID", "0")
 	adminTelegramID, err := strconv.ParseInt(adminIDStr, 10, 64)
@@ -251,6 +256,8 @@ func loadConfig() config {
 	return cfg
 }
 
+// getEnv читает переменную окружения с безопасным fallback.
+// Используется для необязательных настроек, где дефолтный путь или порт допустимы.
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

@@ -1,3 +1,5 @@
+// Package xray оборачивает gRPC API Xray-core в более узкий и безопасный клиентский слой.
+// Здесь спрятаны детали reconnect-логики, таймаутов и форматирования запросов к stats/handler сервисам.
 package xray
 
 import (
