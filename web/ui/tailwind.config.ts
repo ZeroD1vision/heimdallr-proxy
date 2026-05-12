@@ -43,6 +43,11 @@ const config: Config = {
           to: { transform: 'translateY(400%)' },
         },
       },
+        maxWidth: {
+        '8xl': '90rem', // 1440px
+        '9xl': '100rem', // 1600px
+        'ultrawide': '120rem', // 1920px
+      },
     },
   },
   plugins: [],

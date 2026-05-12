@@ -95,7 +95,6 @@ export function useNotify(): UseNotifyReturn {
   const notify = useCallback(
     (input: NotifyInput, origin: NavbarOrigin = 'small') => {
       const id = `${input.category}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      console.log(`[Notify] Sending: ${input.message} (${input.category}) origin=${origin}`);
       actor.send({
         type: 'NOTIFY',
         origin,
@@ -106,7 +105,6 @@ export function useNotify(): UseNotifyReturn {
   );
 
   const dismiss = useCallback(() => {
-    console.log('[Dismiss] Button clicked — sending DISMISS');
     actor.send({ type: 'DISMISS' });
   }, [actor]);
 
