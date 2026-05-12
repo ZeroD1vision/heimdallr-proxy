@@ -1,3 +1,5 @@
+// Package db инкапсулирует доступ к SQLite через GORM и не даёт наружу сам объект gorm.DB.
+// Такой слой нужен, чтобы все операции с данными оставались централизованными и заменяемыми.
 package db
 
 import (
@@ -18,6 +20,8 @@ type Store struct {
 	db *gorm.DB
 }
 
+// NewStore открывает SQLite, включает базовые оптимизации и выполняет автомиграцию моделей.
+// Это стартовая точка всей persistence-части backend'а.
 func NewStore(dsn string) (*Store, error) {
 	// SQLite создаёт файл сам, но директория должна существовать заранее.
 	dir := filepath.Dir(dsn)
@@ -26,37 +30,36 @@ func NewStore(dsn string) (*Store, error) {
 	}
 
 	// Добавляем параметры оптимизации к DSN
-    // WAL позволяет читать и писать одновременно без блокировок
-    optimizedDSN := dsn + "?_journal_mode=WAL&_busy_timeout=5000"
+	// WAL позволяет читать и писать одновременно без блокировок
+	optimizedDSN := dsn + "?_journal_mode=WAL&_busy_timeout=5000"
 
-    db, err := gorm.Open(sqlite.Open(optimizedDSN), &gorm.Config{
-        Logger: logger.Default.LogMode(logger.Silent),
-    })
-    if err != nil {
-        return nil, fmt.Errorf("failed to connect db: %w", err)
-    }
+	db, err := gorm.Open(sqlite.Open(optimizedDSN), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect db: %w", err)
+	}
 
-    sqlDB, err := db.DB()
-    if err != nil {
-        return nil, err
-    }
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
 
 	// Ограничиваем до 1 соединения для записи, так как SQLite — это файл.
-    // Это наш системный семафор на уровне драйвера.
-    sqlDB.SetMaxOpenConns(1)
+	// Это наш системный семафор на уровне драйвера.
+	sqlDB.SetMaxOpenConns(1)
 
 	// Автомиграция создает таблицы по указанным моделям при запуске
-    if err := db.AutoMigrate(
-		&models.User{}, 
+	if err := db.AutoMigrate(
+		&models.User{},
 		&models.UserHistory{},
 		&models.OTPCode{},
 		&models.AuthSession{},
 		&models.WebUser{},
-    	&models.AuthSession{},
+		&models.AuthSession{},
 	); err != nil {
-        return nil, fmt.Errorf("migration failed: %w", err)
-    }
-	
-	return &Store{ db: db }, nil
-}
+		return nil, fmt.Errorf("migration failed: %w", err)
+	}
 
+	return &Store{db: db}, nil
+}
