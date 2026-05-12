@@ -17,7 +17,7 @@ import (
 func (s *Store) SaveOTP(ctx context.Context, otp *models.OTPCode) error {
 	result := s.db.WithContext(ctx).
 		Clauses(clause.OnConflict{
-			Columns: []clause.Column{{ Name: "admin_id" }},
+			Columns:   []clause.Column{{Name: "admin_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{"code", "expires_at", "used"}),
 		}).
 		Create(otp)
@@ -26,7 +26,7 @@ func (s *Store) SaveOTP(ctx context.Context, otp *models.OTPCode) error {
 	}
 	return nil
 }
- 
+
 // FindValidOTP ищет неиспользованный непросроченный код для пользователя.
 // Возвращает db.ErrNotFound если код не найден, истёк или уже использован.
 func (s *Store) FindValidOTP(ctx context.Context, adminID int64, code string) (*models.OTPCode, error) {
@@ -44,7 +44,6 @@ func (s *Store) FindValidOTP(ctx context.Context, adminID int64, code string) (*
 	return &otp, nil
 }
 
-
 // MarkOTPUsed помечает код как использованный.
 // Вызывается сразу после успешной верификации — код нельзя использовать повторно.
 func (s *Store) MarkOTPUsed(ctx context.Context, id uint) error {
@@ -57,7 +56,7 @@ func (s *Store) MarkOTPUsed(ctx context.Context, id uint) error {
 	}
 	return nil
 }
- 
+
 // DeleteExpiredOTPs удаляет все просроченные и использованные коды.
 // Вызывать при старте и периодически — чтобы таблица не росла бесконечно.
 func (s *Store) DeleteExpiredOTPs(ctx context.Context) error {
