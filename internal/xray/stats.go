@@ -3,6 +3,7 @@ package xray
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -140,6 +141,7 @@ func (c *Client) AddUser(ctx context.Context, user models.User) error {
 		return fmt.Errorf("xray add user %s on inbound %s: %w", user.Email, user.InboundTag, err)
 	}
 
+	slog.Info("XRAY_DEBUG", "email", user.Email, "uuid", user.UUID, "tag", user.InboundTag)
 	return nil
 }
 

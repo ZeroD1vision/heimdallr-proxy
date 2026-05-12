@@ -15,10 +15,13 @@ type StatsProvider interface {
 // UserStats — транспортная структура для передачи живых данных из Xray.
 // Не является моделью БД — тегов gorm здесь нет намеренно.
 // Uplink и Downlink хранятся в байтах (raw от Xray).
+// Используется в ответе GET /api/stats — фронт получает массив,
+// может отрисовать шкалы для каждого юзера и при желании сложить итог сам.
 type UserStats struct {
 	Email    string `json:"email"`
-	Downlink int64  `json:"downlink_bytes"`
 	Uplink   int64  `json:"uplink_bytes"`
+	Downlink int64  `json:"downlink_bytes"`
+	Online   bool   `json:"online"`
 }
 
 // UserHistory — запись в БД, один снимок состояния трафика пользователя.

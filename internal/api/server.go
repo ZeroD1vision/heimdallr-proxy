@@ -34,6 +34,8 @@ type HistoryProvider interface {
 	GetHistory(ctx context.Context, email string, limit int) ([]models.UserHistory, error)
 }
 
+
+
 // OTPStore — всё что серверу нужно от БД для работы с OTP.
 type OTPStore interface {
 	SaveOTP(ctx context.Context, otp *models.OTPCode) error
@@ -79,11 +81,15 @@ type XrayUserManager interface {
 	RemoveUser(ctx context.Context, inboundTag, email string) error
 }
 
-// PresenceProvider — read-only доступ к online/offline кэшу.
-// API использует этот интерфейс для обогащения списка пользователей.
+// PresenceProvider — интерфейс для server.go.
+// GetAllStats добавлен вместо GetTotalStats: фронт получает данные
+// по каждому юзеру и агрегирует сам если нужно.
 type PresenceProvider interface {
 	IsOnline(email string) bool
+	// GetAllStats возвращает срез со статистикой каждого пользователя из кэша.
+	GetAllStats() []models.UserStats
 }
+
 
 // --- Структура сервера ---
 type Server struct {
@@ -678,12 +684,7 @@ func (s *Server) parseJWT(tokenStr string) (*jwtClaims, error) {
 
 // GET /api/stats — статистика в текущий момент
 func (s *Server) handleStats(c echo.Context) error {
-	stats, err := s.statsProvider.GetUserStats(c.Request().Context(), s.adminEmail)
-	if err != nil {
-		slog.Error("api: failed to get stats", "error", err, "remote_ip", c.RealIP())
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
-	}
-	return c.JSON(http.StatusOK, stats)
+	return c.JSON(http.StatusOK, s.presence.GetAllStats())
 }
 
 // GET /api/history?limit=100 — история из БД

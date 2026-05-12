@@ -22,6 +22,7 @@ type CollectorStore interface {
 // он может быть недоступен пока Store работает нормально.
 type XrayClient interface {
 	GetUserStats(ctx context.Context, email string) (models.UserStats, error)
+	AddUser(ctx context.Context, user models.User) error
 }
 
 // PresenceStore — минимальный контракт кэша online/offline статусов.
@@ -92,6 +93,10 @@ func (c *Collector) tick(ctx context.Context) {
 			// Ошибка при получении stats — нет информации об активности
 			// Оставляем lastActivity как была, IsOnline проверит timeout
 			slog.Error("collector: failed to fetch stats from Xray API", "email", user.Email, "error", err)
+			err := c.xray.AddUser(ctx, user) // Пытаемся добавить пользователя в Xray, если его там нет
+			if err != nil {
+				slog.Error("collector: failed to add user to Xray", "email", user.Email, "error", err)
+			}
 			continue
 		}
 

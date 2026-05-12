@@ -3,6 +3,8 @@ package collector
 import (
 	"sync"
 	"time"
+
+	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
 )
 
 type userPresence struct {
@@ -11,11 +13,15 @@ type userPresence struct {
 	totalDownlink int64
 }
 
+// PresenceCache — in-memory кэш онлайн-статусов и трафика.
+// Коллектор пишет сюда на каждом тике через SetStats.
+// API читает отсюда — без обращений к Xray напрямую.
 type PresenceCache struct {
 	mu       sync.RWMutex
 	state    map[string]userPresence
 	timeout  time.Duration // порог неактивности для offline
 }
+
 
 func NewPresenceCache() *PresenceCache {
 	return &PresenceCache{
@@ -50,6 +56,7 @@ func (p *PresenceCache) SetStats(email string, uplink, downlink int64) {
 	}
 }
 
+// IsOnline возвращает true если пользователь был активен в пределах timeout.
 func (p *PresenceCache) IsOnline(email string) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -66,4 +73,27 @@ func (p *PresenceCache) IsOnline(email string) bool {
 
 	// Если давно неактивен — офлайн
 	return false
+}
+
+// GetAllStats возвращает срез UserStats по всем пользователям в кэше.
+//
+// Фронт получает один объект со всеми юзерами — может отрисовать
+// индивидуальные шкалы трафика и при желании агрегировать на своей стороне.
+// Один RLock на весь проход — не держим мьютекс дольше необходимого.
+func (p *PresenceCache) GetAllStats() []models.UserStats {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+ 
+	result := make([]models.UserStats, 0, len(p.state))
+	now := time.Now()
+ 
+	for email, presence := range p.state {
+		result = append(result, models.UserStats{
+			Email:    email,
+			Uplink:   presence.totalUplink,
+			Downlink: presence.totalDownlink,
+			Online:   now.Sub(presence.lastActivity) < p.timeout,
+		})
+	}
+	return result
 }
