@@ -8,6 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/labstack/echo/v4 v4.15.1
 	github.com/xtls/xray-core v1.8.24
+	golang.org/x/crypto v0.48.0
 	google.golang.org/grpc v1.79.1
 	gopkg.in/telebot.v3 v3.3.8
 	gorm.io/gorm v1.31.1
@@ -32,7 +33,6 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/xtls/reality v0.0.0-20240712055506-48f0b2d5ed6d // indirect
-	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
