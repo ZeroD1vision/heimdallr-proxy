@@ -3,7 +3,13 @@ import { useEffect } from 'react';
 import { MotionConfig } from 'framer-motion';
 import Navbar from './navbar';
 
-const meta: Meta<typeof Navbar> = {
+type NavbarStoryArgs = React.ComponentProps<typeof Navbar> & {
+  isScrolledSim?: boolean;
+  timeScale?: number;
+  mockPath?: string;
+};
+
+const meta: Meta<NavbarStoryArgs> = {
   title: 'Layout/Navbar',
   component: Navbar,
   parameters: {
@@ -22,7 +28,6 @@ const meta: Meta<typeof Navbar> = {
       control: { type: 'range', min: 0.05, max: 1, step: 0.05 },
       name: 'Animation Speed',
     },
-    // ФИКС №2: Имитируем путь, так как Navbar берет variant из pathname
     mockPath: {
       control: { type: 'select' },
       options: ['/', '/login', '/register'],
