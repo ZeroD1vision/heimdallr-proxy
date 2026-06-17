@@ -121,7 +121,7 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           source: 'out/'
           target: '/var/www/heimdallr'
-          # Результат: /var/www/heimdallr/out/ — совпадает с STATIC_DIR в .env
+          # В иитоге: /var/www/heimdallr/out/ - совпадает с STATIC_DIR в .env
 
   # ────────────────────────────────────────────────────────────────────────────
   # Job 4: Service orchestration
@@ -162,6 +162,6 @@ jobs:
           key: ${{ secrets.SSH_DEPLOY_USER_KEY }}
           port: ${{ secrets.SSH_PORT }}
           script: |
-            # Проверяем что / отдаёт 200 (Next.js index.html через Echo)
+            # Проверяем, что / живой и отдаёт 200.
             curl -fsS --retry 10 --retry-delay 2 http://localhost:${{ secrets.API_PORT }}/ -o /dev/null || exit 1
             echo "Frontend serving: OK"
