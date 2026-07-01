@@ -184,6 +184,12 @@ func (s *Server) setupRoutes() {
 	// ── Статика — Next.js build ───────────────────────────────────────────────
 	s.router.Static("/", s.staticDir)
 	s.router.File("/", filepath.Join(s.staticDir, "index.html"))
+
+	// ── Обработка 404 (Если роут не найден в API и статических файлах) ────────
+	s.router.RouteNotFound("/*", func(c echo.Context) error {
+		// Отдаем скомпилированный Next.js файл 404.html со статусом 404
+		return c.File(filepath.Join(s.staticDir, "404.html"))
+	})
 }
 
 // ── Auth handlers ─────────────────────────────────────────────────────────────
