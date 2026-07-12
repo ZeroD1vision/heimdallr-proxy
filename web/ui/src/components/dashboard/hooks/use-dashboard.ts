@@ -74,6 +74,7 @@ export function useDashboard() {
   const [showCreate,    setShowCreate   ] = useState(false);
   const [filter,        setFilter       ] = useState<UserFilter>('all');
   const [search,        setSearch       ] = useState('');
+  const [hasError,      setHasError     ] = useState(false);
 
   // Рефы для дедупликации нотификаций:
   // не хотим показывать "Dashboard synced" при каждом тике поллинга —
@@ -116,6 +117,8 @@ export function useDashboard() {
       usersRes.status === 'fulfilled' &&
       statsRes.status === 'fulfilled' &&
       histRes.status === 'fulfilled';
+
+    setHasError(!allSuccess);
 
     if (allSuccess) {
       if (!hasAnnouncedSyncRef.current) {
@@ -234,5 +237,6 @@ export function useDashboard() {
     // Экшены
     fetchAll,
     executeAction,
+    hasError,
   };
 }
