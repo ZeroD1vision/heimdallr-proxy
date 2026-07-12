@@ -61,6 +61,7 @@ export default function DashboardPage() {
     // Экшены
     fetchAll,
     executeAction,
+    hasError,
   } = useDashboard();
 
   return (
@@ -99,25 +100,30 @@ export default function DashboardPage() {
 
             <div className="flex items-center gap-2">
               {/* Индикатор live-обновления */}
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/8 bg-white/4">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full">
                 <motion.span
-                  className="w-1.5 h-1.5 rounded-full bg-emerald-400"
-                  animate={{ opacity: [1, 0.3, 1] }}
+                  className="w-1.5 h-1.5 rounded-full"
+                  animate={{ 
+                    opacity: [1, 0.5, 1], 
+                    backgroundColor: hasError ? '#ff3b5c' : '#34d399',
+                  }}
                   transition={{ duration: 2, repeat: Infinity }}
                 />
-                <span className="text-[9px] uppercase tracking-[0.2em] text-white/35">
-                  Live · 10s
+                <span className="text-[12px] uppercase tracking-[0.2em] text-white/65">
+                  {hasError ? 'Error' : 'Live · 10s'}
                 </span>
               </div>
 
               {/* Создать пользователя */}
               <motion.button
                 onClick={() => setShowCreate(true)}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl
+                disabled={hasError}
+                whileHover={hasError ? {} : { scale: 1.02 }}
+                whileTap={hasError ? {} : { scale: 0.98 }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl
                   font-jakarta font-black text-[10px] uppercase tracking-[0.2em]
-                  text-black transition-all"
+                  text-black transition-all duration-300
+                  ${hasError ? 'opacity-30 cursor-not-allowed select-none' : ''}`}
                 style={{ background: 'var(--accent)' }}
               >
                 <Plus size={12} />
@@ -125,6 +131,37 @@ export default function DashboardPage() {
               </motion.button>
             </div>
           </motion.div>
+
+          {/* ── Системный баннер ошибки сервера ── */}
+          <AnimatePresence>
+            {hasError && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, height: 'auto', marginBottom: 12 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden"
+              >
+                <div className="relative rounded-xl border border-[#ff3b5c]/30 bg-black/60 backdrop-blur-md p-4 flex items-center gap-3">
+                  {/* Красное неоновое свечение сзади баннера */}
+                  <div className="absolute inset-0 rounded-xl bg-[#ff3b5c]/2 blur-md pointer-events-none" />
+                  
+                  <div className="w-2 h-2 rounded-full bg-[#ff3b5c] animate-pulse" />
+                  <div className="flex-1">
+                    <h3 className="font-geist-mono font-bold text-[11px] uppercase tracking-[0.15em] text-[#ff3b5c]">
+                      Heimdallr Core Link Interrupted
+                    </h3>
+                    <p className="text-[10px] text-white/40 font-geist-mono mt-0.5">
+                      Backend node unreachable (Status 500/401 or Connection Timeout). Interface entered Read-Only mode.
+                    </p>
+                  </div>
+                  <span className="text-[9px] font-geist-mono uppercase tracking-widest text-white/20 bg-white/5 px-2 py-1 rounded border border-white/5">
+                    RECONNECTING...
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* ── Карточки метрик ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
