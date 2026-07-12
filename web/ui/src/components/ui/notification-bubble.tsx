@@ -23,40 +23,51 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X, AlertTriangle, Info } from 'lucide-react';
 import type { Notification, NotificationIcon } from '@/store/use-notification-machine';
+import { useGlow } from '@/context/glow-context';
+import { NAVBAR_ANIMATION_TOKENS } from '@/shared/config/animations';
 
 // ─── Цветовые токены по типу иконки ──────────────────────────────────────────
 
-const ICON_META: Record<
-  NotificationIcon,
-  { icon: React.ReactNode; color: string; glow: string; ring: string }
-> = {
+interface IconMetaValue {
+  icon: React.ReactNode;
+  color: string;
+  glow: string;
+  ring: string;
+  glowHex: string;
+}
+
+const ICON_META: Record<NotificationIcon, IconMetaValue> = {
   check: {
     icon: <Check size={14} strokeWidth={2.5} />,
     color: 'text-emerald-400',
     glow: 'shadow-[0_0_12px_2px_rgba(52,211,153,0.35)]',
     ring: 'border-emerald-500/40',
+    glowHex: '#34d399',
   },
   error: {
     icon: <X size={14} strokeWidth={2.5} />,
     color: 'text-red-400',
     glow: 'shadow-[0_0_12px_2px_rgba(248,113,113,0.35)]',
     ring: 'border-red-500/40',
+    glowHex: '#f87171',
   },
   warn: {
     icon: <AlertTriangle size={13} strokeWidth={2.5} />,
     color: 'text-amber-400',
     glow: 'shadow-[0_0_12px_2px_rgba(251,191,36,0.35)]',
     ring: 'border-amber-500/40',
+    glowHex: '#fbbf24',
   },
   info: {
     icon: <Info size={14} strokeWidth={2} />,
     color: 'text-sky-400',
     glow: 'shadow-[0_0_12px_2px_rgba(56,189,248,0.35)]',
     ring: 'border-sky-500/40',
+    glowHex: '#38bdf8',
   },
 };
 
@@ -140,6 +151,21 @@ export function NotificationBubble({
   onDismiss,
 }: NotificationBubbleProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const { setGlowColor } = useGlow();
+  const activeMeta = notification?.icon ? ICON_META[notification.icon] : null;
+  const isError = notification?.icon === 'error';
+
+  // Управляем свечением удаленно
+  useEffect(() => {
+    if (isError && activeMeta) {
+      setGlowColor(activeMeta.glowHex);
+    } else {
+      setGlowColor(null);
+    }
+
+    // Сброс при размонтировании
+    return () => setGlowColor(null);
+  }, [isError, activeMeta, setGlowColor]);
 
   const dividerColor: Record<NotificationIcon, string> = {
     check: 'bg-emerald-500/20',
@@ -150,7 +176,7 @@ export function NotificationBubble({
 
   return (
     <AnimatePresence mode="wait">
-      {notification && (
+      {notification && activeMeta && (
         <>
           {/* Разделитель */}
           <Divider
@@ -167,7 +193,7 @@ export function NotificationBubble({
             initial={{ opacity: 0, y: 8, filter: 'blur(6px)' }}
             animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             exit={{ opacity: 0, y: -6, filter: 'blur(6px)' }}
-            transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: NAVBAR_ANIMATION_TOKENS.CONTENT.BUBBLE_FADE_SEC, ease: 'easeOut' }}
             // Позиционируем ниже навбар-зоны (top: 48px), до конца острова (bottom: 0)
             className="absolute left-0 right-0 flex flex-row items-center justify-center gap-2 cursor-pointer select-none"
             style={{ top: '52px', bottom: '8px' }}
@@ -179,7 +205,7 @@ export function NotificationBubble({
             <motion.div
               initial={{ opacity: 0, x: 20 }} // Стартовая точка (ближе к центру)
               animate={{ x: -10, opacity: 1 }} // Финальная точка (чуть левее от центра)
-              transition={{ duration: 0.3 }}
+              transition={{ duration: NAVBAR_ANIMATION_TOKENS.CONTENT.INNER_TRANSIT_SEC }}
             >
               {notification.icon && (
                 <DismissableIcon
@@ -193,7 +219,7 @@ export function NotificationBubble({
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 10 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
+              transition={{ duration: NAVBAR_ANIMATION_TOKENS.CONTENT.INNER_TRANSIT_SEC, ease: "easeOut" }}
               className="flex flex-col items-start justify-center" // Выравниваем текст по левому краю внутри группы
             >
               <motion.span
