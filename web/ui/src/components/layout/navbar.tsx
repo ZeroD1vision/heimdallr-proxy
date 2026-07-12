@@ -33,6 +33,9 @@ import {
 import { NotificationBubble } from '@/components/ui/notification-bubble';
 import { PersistentStack } from '@/components/ui/persistent-stack';
 import { usePersistentStack } from '@/store/use-persistent-stack';
+import { GlowProvider, useGlow } from '@/context/glow-context';
+import { BurningGlow } from '@/components/ui/burning-glow';
+import { NAVBAR_ANIMATION_TOKENS } from '@/shared/config/animations';
 
 
 // ─── Геометрия острова ────────────────────────────────────────────────────────
@@ -62,7 +65,12 @@ const ISLAND_TOP = {
 // Вычисляется динамически на основе количества элементов в компоненте PersistentStack.
 const STACK_EXTENSION_WIDTH = 48; // px, приблизительно
  
-export default function Navbar() {
+function GlowConsumerComponent() {
+  const { glowColor } = useGlow();
+  return <BurningGlow color={glowColor} />;
+}
+
+function NavbarContent() {
   const router = useRouter();
   const pathname = usePathname();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -223,67 +231,72 @@ export default function Navbar() {
         */}
         <div className="absolute inset-0 flex justify-center pointer-events-none z-0">
  
-          {/* Стек постоянных элементов — левое расширение */}
-          <AnimatePresence>
-            {persistentItemCount > 0 && (
-              <motion.div
-                initial={{ opacity: 0, x: 12, width: 0 }}
-                animate={{ opacity: 1, x: 0, width: STACK_EXTENSION_WIDTH }}
-                exit={{ opacity: 0, x: 12, width: 0 }}
-                transition={{ type: 'spring', stiffness: 260, damping: 24 }}
-                className="relative z-10 pointer-events-auto flex items-center justify-end pr-2"
-                style={{ height: islandAnimate.height }}
-              >
-                <PersistentStack visible={isNotifActive} />
-              </motion.div>
-            )}
-          </AnimatePresence>
- 
-          {/* Основной стеклянный остров */}
-          <GlassPane
-            style={{ position: 'relative' }}
-            animate={islandAnimate}
-            transition={{ type: 'spring', stiffness: 200, damping: 30 }}
-            onAnimationComplete={handleIslandAnimationComplete}
-          >
-          </GlassPane>
+          {/* ─── Стеклянный остров ────────────────────────────────────────────────────── */}
+          <div className="absolute inset-0 flex justify-center pointer-events-none z-0">
+            
+            {/* Относительный контейнер-контур для эффекта зажигания */}
+            {/* Он полностью повторяет размеры и анимацию острова, но НЕ ИМЕЕТ overflow-hidden */}
+            <motion.div 
+              style={{ position: 'relative' }}
+              animate={{
+                width: islandAnimate.width,
+                height: islandAnimate.height,
+                top: islandAnimate.top,
+                borderRadius: islandAnimate.borderRadius,
+              }}
+              transition={{ 
+                duration: NAVBAR_ANIMATION_TOKENS.LAYOUT.DURATION_SEC, 
+                ease: NAVBAR_ANIMATION_TOKENS.LAYOUT.EASE }}
+              className="pointer-events-none"
+            >
+              {/* Достаем цвет из контекста, который туда прокинул NotificationBubble */}
+              <GlowConsumerComponent />
 
-          {/* Пузырь уведомления — рендерится внутри острова, когда активен */}
-          <AnimatePresence>
-            {isNotifActive && (
-              <motion.div
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ duration: 0.25, ease: 'easeOut' }}
-                className="absolute left-1/2 -translate-x-1/2 flex justify-center pointer-events-auto overflow-hidden"
-                style={{
-                  width: islandAnimate.width,
-                  height: islandAnimate.height,
-                  borderRadius: islandAnimate.borderRadius,
-                  top: islandAnimate.top,
-                  zIndex: 1,
-                  originX: 0.5,
-                }}
-              >
-                { /*Без этого контейнера длина опередляалсь по ближайшему relative - Navbar, а не по 
-                острову и длина была как у Navbar, а это почти весь экран и переопределение width 
-                в motion.div не помогало. */}
-                <div 
-                  className="relative h-full overflow-hidden" 
-                  style={{ 
+              {/* Основной стеклянный остров (внутри него работает overflow-hidden самого GlassPane) */}
+              <GlassPane
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+                animate={{ borderRadius: islandAnimate.borderRadius }}
+                transition={{ 
+                  duration: NAVBAR_ANIMATION_TOKENS.LAYOUT.DURATION_SEC, 
+                  ease: NAVBAR_ANIMATION_TOKENS.LAYOUT.EASE }}
+                onAnimationComplete={handleIslandAnimationComplete}
+              />
+            </motion.div>
+
+            {/* Пузырь уведомления — рендерится внутри острова, когда активен */}
+            <AnimatePresence>
+              {isNotifActive && (
+                <motion.div
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: NAVBAR_ANIMATION_TOKENS.CONTENT.BUBBLE_FADE_SEC, ease: 'easeOut' }}
+                  className="absolute left-1/2 -translate-x-1/2 flex justify-center pointer-events-auto overflow-hidden"
+                  style={{
                     width: islandAnimate.width,
-                    borderRadius: islandAnimate.borderRadius 
+                    height: islandAnimate.height,
+                    borderRadius: islandAnimate.borderRadius,
+                    top: islandAnimate.top,
+                    zIndex: 1,
+                    originX: 0.5,
                   }}
                 >
-                  <NotificationBubble
-                    notification={currentNotif}
-                    onDismiss={handleDismiss}
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  <div 
+                    className="relative h-full overflow-hidden" 
+                    style={{ 
+                      width: islandAnimate.width,
+                      borderRadius: islandAnimate.borderRadius 
+                    }}
+                  >
+                    <NotificationBubble
+                      notification={currentNotif}
+                      onDismiss={handleDismiss}
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
         {/* Логотип — контентный слой, GlassPaneContent даёт position: relative */}
@@ -312,13 +325,29 @@ export default function Navbar() {
             backdrop-saturate-[180%] shadow-2xl z-10"
         >
           <div className="flex text-[12px] items-center font-bold uppercase tracking-[0.25em] relative">
+            <AnimatePresence>
+              {persistentItemCount > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, x: 8, filter: 'blur(4px)' }}
+                  animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+                  exit={{ opacity: 0, x: 8, filter: 'blur(4px)' }}
+                  transition={{ type: 'spring', stiffness: 260, damping: 26 }}
+                  // right-full выносит иконки за левый борт капсюля, mr-4 задает зазор.
+                  // top-1/2 -translate-y-1/2 центрирует их строго по горизонтальной оси меню.
+                  className="absolute right-full -translate-y-1/2 mr-16 pointer-events-auto flex items-center"
+                >
+                  <PersistentStack visible={isNotifActive} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+            
             <AnimatePresence mode="popLayout">
               {currentTabs.map((tab) => (
                 <Link
                   key={tab.id}
                   href={tab.href}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`px-6 py-1 transition-colors duration-500 relative z-10 ${
+                  className={`px-6 h-6 flex items-center justify-center transition-colors duration-500 relative z-10 ${
                     activeTab === tab.id
                       ? 'text-white'
                       : 'text-[#a1a1aa] hover:text-zinc-100'
@@ -351,7 +380,7 @@ export default function Navbar() {
           as={motion.div}
           initial={{ opacity: 0, x: 50, filter: 'blur(10px)' }} // Появляется справа
           animate={{ 
-            x: isSmall ? '10vw' : 0,
+            x: isSmall ? '8vw' : 0,
             opacity: isAuth ? 0 : 1,
             filter: 'blur(0px)',
           }}
@@ -444,6 +473,14 @@ export default function Navbar() {
         </div>
       </div>
     </nav>
+  );
+}
+
+export default function Navbar() {
+  return (
+    <GlowProvider>
+      <NavbarContent />
+    </GlowProvider>
   );
 }
 
