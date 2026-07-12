@@ -33,33 +33,43 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
    * Мы подписываемся на снимки actor вместо использования встроенного в XState
    * `observe`, чтобы сохранить идиоматичный для React паттерн — один useEffect,
    * одна подписка, корректная очистка.
+   * Переносит элемент в persistent stack в момент, когда он окончательно покидает экран
+   * (по таймеру или при замене другим уведомлением), если только он не был временно
+   * вытеснен более высоким приоритетом обратно в очередь.
    */
   useEffect(() => {
-    console.log('[Provider] Subscribing to actor');
-    let previousStateName: string | null = null;
-
+    let prevCurrent: any = null;
+    
     const subscription = actor.subscribe((snapshot) => {
-      const currentStateName = snapshot.value as string;
-      const state = snapshot.value;
-      const currentMsg = snapshot.context.current?.message || 'null';
-
-      console.log(`[Machine → ${state}] current: "${currentMsg}"`, 
-        snapshot.context.queue.length > 0 ? `(queue: ${snapshot.context.queue.length})` : '');
-      // Определяем границу перехода shrinking → idle.
+      const current = snapshot.context.current;
+      const queue = snapshot.context.queue;
+    
+      // Если на экране только что было персистентное уведомление, а теперь слот обновился/очистился
       if (
-        previousStateName === 'shrinking' &&
-        currentStateName === 'idle'
+        prevCurrent && 
+        prevCurrent.type === 'persistent' && 
+        prevCurrent.id !== current?.id
       ) {
-        // К этому моменту машина уже вызвала clearCurrent,
-        // но снимок, захваченный прямо перед вызовом clearCurrent, всё ещё
-        // содержит уведомление в контексте. Мы сохранили его в ref ниже.
+        // Проверяем, не находится ли вытесненное уведомление снова в очереди
+        const isStillInQueue = queue.some((item) => item.id === prevCurrent.id);
+        
+        // Если его нет в очереди — значит оно отработало свой цикл и должно уйти в стек
+        if (!isStillInQueue) {
+          pushPersistent({
+            id: prevCurrent.id,
+            message: prevCurrent.message,
+            icon: prevCurrent.icon ?? 'info',
+            category: prevCurrent.category,
+          });
+        }
       }
-
-      previousStateName = currentStateName;
+    
+      // Сохраняем указатель для следующего снимка
+      prevCurrent = current;
     });
-
+  
     return () => subscription.unsubscribe();
-  }, [actor]);
+  }, [actor, pushPersistent]);
 
   /**
    * Отдельная подписка для переноса постоянного элемента.
