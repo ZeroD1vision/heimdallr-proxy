@@ -2,7 +2,7 @@
 // Типизированный клиент к Heimdallr API.
 // Все эндпоинты описаны здесь — компоненты не знают про fetch напрямую.
 
-const API_PORT = process.env.API_PORT || '4000';
+const API_PORT = process.env.NEXT_PUBLIC_API_PORT || '4000';
 const BASE = `http://127.0.0.1:${API_PORT}`;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
