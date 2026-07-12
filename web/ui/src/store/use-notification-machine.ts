@@ -17,6 +17,7 @@
  */
 
 import { setup, assign, sendTo, raise, fromCallback, InspectionEvent } from 'xstate';
+import { NAVBAR_ANIMATION_TOKENS } from '@/shared/config/animations';
 
 // ─── Типы предметной области ──────────────────────────────────────────────────
 
@@ -71,14 +72,15 @@ export type NotificationEvent =
   | { type: 'NOTIFY'; payload: Omit<Notification, 'createdAt'>, origin?: NavbarOrigin; }
   | { type: 'ANIMATION_END' }
   | { type: 'TIMER_DONE' }
-  | { type: 'DISMISS' };
+  | { type: 'DISMISS' }
+  | { type: 'FADE_DONE' };
 
 // ─── Утилиты очереди (чистые функции — легко покрываются юнит-тестами) ────────
 
 const MAX_QUEUE_DEPTH = 5;
-const FAST_DRAIN_THRESHOLD = 3; // Глубина очереди, при которой включается более быстрое время показа
+const FAST_DRAIN_THRESHOLD = 2; // Глубина очереди, при которой включается более быстрое время показа
 const FAST_DRAIN_MS = 1000;
-const NORMAL_DISPLAY_MS = 3000;
+const NORMAL_DISPLAY_MS = 5000;
 
 /**
  * Правило 3 — TTL: отбрасывать записи, которые ожидали слишком долго.
@@ -163,9 +165,6 @@ function shouldReverseImmediately(incoming: Notification): boolean {
 // ─── Вспомогательная функция таймера показа ───────────────────────────────────
 
 function displayDurationMs(queue: Notification[]): number {
-    const result = queue.length > 0 ? 1000 : 3000;
-    console.log('[Machine] Calculated Delay:', result); // ЧТО ТУТ В КОНСОЛИ?
-    return result;
     return queue.length >= FAST_DRAIN_THRESHOLD ? FAST_DRAIN_MS : NORMAL_DISPLAY_MS;
 }
 
@@ -175,6 +174,13 @@ export const notificationMachine = setup({
   types: {
     context: {} as NotificationContext,
     events: {} as NotificationEvent,
+  },
+
+  // ── Реестр задержек ────────────────────────────────────────────────────────
+  delays: {
+    DISPLAY_TIMER: ({ context }: { context: NotificationContext }) => 
+        displayDurationMs(context.queue),
+    ANIMATION_TIMEOUT: NAVBAR_ANIMATION_TOKENS.LAYOUT.TIMEOUT_MS,
   },
 
   actions: {
@@ -297,6 +303,9 @@ export const notificationMachine = setup({
     // Стеклянный остров растёт. Мы принимаем новые события, но не прерываем
     // геометрическую анимацию — меняться может только содержимое.
     expanding: {
+      after: {
+        ANIMATION_TIMEOUT: { target: 'visible' } // Автоматический гарантированный переход
+      },
       on: {
         ANIMATION_END: { 
             target: 'visible', 
@@ -337,14 +346,15 @@ export const notificationMachine = setup({
     // ── ОТОБРАЖЕНИЕ ─────────────────────────────────────────────────────────
     // Уведомление находится на экране. Выходом управляет таймер.
     visible: {
-        entry: 'startDisplayTimer',
+        // Декларативный таймер XState v5. Автоматически сбрасывается и чистится.
+        after: {
+          DISPLAY_TIMER: [
+            { guard: 'hasQueuedItems', target: 'changing' },
+            { target: 'fadingOut' }
+          ]
+        },
 
         on: {
-            TIMER_DONE: [
-              { guard: 'hasQueuedItems', target: 'changing' },
-              { target: 'shrinking' }
-            ],
-
             NOTIFY: [
               // Идемпотентное обновление на месте (та же категория, тот же приоритет).
               {
@@ -392,7 +402,7 @@ export const notificationMachine = setup({
               },
             ],
 
-            DISMISS: { target: 'shrinking' },
+            DISMISS: { target: 'fadingOut' },
         },
     },
 
@@ -419,9 +429,46 @@ export const notificationMachine = setup({
       },
     },
 
+    // ── ЗАТУХАНИЕ ПОДСВЕТКИ ──────────────────────────────────────────────────
+    fadingOut: {
+      entry: ({ self }) => {
+        // Даем ровно NAVBAR_ANIMATION_TOKENS.FADE_OUT.TIMEOUT_MS на линейный fade-out эффектов свечения
+        setTimeout(() => 
+          self.send({ type: 'FADE_DONE' }), 
+          NAVBAR_ANIMATION_TOKENS.FADE_OUT.TIMEOUT_MS);
+      },
+      on: {
+        FADE_DONE: { target: 'shrinking' },
+        
+        // Переиспользуем логику перебивания/очереди из на случай резкого NOTIFY
+        NOTIFY: [
+          {
+            guard: {
+              type: 'incomingReversesShrink',
+              params: ({ event }) => ({ incoming: { ...event.payload, createdAt: Date.now() } }),
+            },
+            target: 'expanding',
+            actions: assign(({ event }) => ({
+              current: { ...event.payload, createdAt: Date.now() },
+              queue: [],
+            })),
+          },
+          {
+            actions: {
+              type: 'enqueue',
+              params: ({ event }) => ({ incoming: { ...event.payload, createdAt: Date.now() } }),
+            },
+          },
+        ],
+      },
+    },
+
     // ── СЖАТИЕ ───────────────────────────────────────────────────────────────
     // Остров схлопывается. Поведение при NOTIFY зависит от приоритета (Правило 1+Б).
     shrinking: {
+      after: {
+        ANIMATION_TIMEOUT: { target: 'idle' }    // Железный возврат в idle
+      },
       on: {
         ANIMATION_END: {
           target: 'idle',
@@ -466,12 +513,6 @@ export const notificationMachine = setup({
         return {};
       }),
     },
-  },
-
-  // ── Реестр задержек ────────────────────────────────────────────────────────
-  delays: {
-    DISPLAY_TIMER: ({ context }: { context: NotificationContext }) => 
-        displayDurationMs(context.queue),
   },
 });
 

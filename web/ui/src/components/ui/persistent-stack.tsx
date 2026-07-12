@@ -22,6 +22,7 @@ import {
   selectOverflowCount,
   selectTotalCount,
 } from '@/store/use-persistent-stack';
+import { useShallow } from 'zustand/react/shallow';
 import type { NotificationIcon } from '@/store/use-notification-machine';
 import type { PersistentItem } from '@/store/use-persistent-stack';
 
@@ -159,7 +160,7 @@ interface PersistentStackProps {
 }
 
 export function PersistentStack({ visible }: PersistentStackProps) {
-  const visibleItems = usePersistentStack(selectVisibleItems);
+  const visibleItems = usePersistentStack(useShallow(selectVisibleItems));
   const overflowCount = usePersistentStack(selectOverflowCount);
   const totalCount = usePersistentStack(selectTotalCount);
   const isPanelOpen = usePersistentStack((s) => s.isPanelOpen);
