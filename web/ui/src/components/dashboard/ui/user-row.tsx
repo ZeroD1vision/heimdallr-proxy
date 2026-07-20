@@ -44,7 +44,7 @@ function ActionBtn({ icon, label, color, danger, onClick }: ActionBtnProps) {
     <button
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-        text-[9px] uppercase tracking-[0.15em] font-bold
+        text-ui-nano uppercase tracking-[0.15em] font-bold
         border transition-all duration-200"
       style={{
         color:       color ?? 'rgba(255,255,255,0.4)',
@@ -113,10 +113,10 @@ export function UserRow({ user, index, onAction }: UserRowProps) {
         <div className="flex items-center gap-3 min-w-0">
           <StatusOrb status={user.status} />
           <div className="min-w-0">
-            <p className="text-[12px] text-white/90 font-geist-mono truncate">
+            <p className="text-ui-sm text-white/90 font-geist-mono truncate">
               {user.email}
             </p>
-            <p className="text-[9px] text-white/25 truncate tracking-wide mt-0.5">
+            <p className="text-ui-nano text-white/25 truncate tracking-wide mt-0.5">
               {user.inbound_tag}
             </p>
           </div>
@@ -124,14 +124,14 @@ export function UserRow({ user, index, onAction }: UserRowProps) {
 
         {/* Статус-бейдж */}
         <span
-          className="text-[8px] uppercase tracking-[0.15em] px-2 py-1 rounded-md font-bold"
+          className="text-ui-nano uppercase tracking-[0.15em] px-2 py-1 rounded-md font-bold"
           style={statusStyle[user.status]}
         >
           {statusLabel[user.status]}
         </span>
 
         {/* Срок действия (скрыт на мобилке) */}
-        <span className="text-[10px] text-white/25 font-geist-mono hidden sm:block">
+        <span className="text-ui-xs text-white/25 font-geist-mono hidden sm:block">
           {fmtExpiry(user.expires_at)}
         </span>
 
@@ -157,7 +157,7 @@ export function UserRow({ user, index, onAction }: UserRowProps) {
             <div className="px-5 pb-4 space-y-3">
               {/* Трафик */}
               <div className="flex items-center gap-4">
-                <span className="text-[9px] text-white/25 uppercase tracking-widest w-16">
+                <span className="text-ui-nano text-white/25 uppercase tracking-widest w-16">
                   Traffic
                 </span>
                 <TrafficBar used={total} limit={user.traffic_limit} />
@@ -166,10 +166,10 @@ export function UserRow({ user, index, onAction }: UserRowProps) {
               {/* Telegram ID — только если привязан */}
               {user.telegram_id > 0 && (
                 <div className="flex items-center gap-4">
-                  <span className="text-[9px] text-white/25 uppercase tracking-widest w-16">
+                  <span className="text-ui-nano text-white/25 uppercase tracking-widest w-16">
                     Telegram
                   </span>
-                  <span className="text-[10px] text-white/40 font-geist-mono">
+                  <span className="text-ui-xs text-white/40 font-geist-mono">
                     {user.telegram_id}
                   </span>
                 </div>

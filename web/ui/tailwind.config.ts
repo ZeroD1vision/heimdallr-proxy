@@ -14,6 +14,22 @@ const config: Config = {
         jost: ['Jost', 'sans-serif'],
         jakarta: ['Plus Jakarta Sans', 'sans-serif'],
       },
+      fontSize: {
+        // Микро-подписи - строго для капса
+        'ui-nano': ['10px', { lineHeight: '12px', letterSpacing: '0.15em' }],
+        
+        // Второстепенный UI - фильтры, счетчики, метаданные
+        'ui-xs': ['11px', { lineHeight: '14px', letterSpacing: '0.1em' }],
+        
+        // Стандартный интерфейсный шрифт - кнопки, инпуты, логи
+        'ui-sm': ['13px', { lineHeight: '18px', letterSpacing: '0.02em' }],
+        
+        // Читабельный текст / крупные лейблы
+        'ui-md': ['15px', { lineHeight: '22px' }],
+        
+        // Крупные акценты и подзаголовки
+        'ui-lg': ['18px', { lineHeight: '26px', letterSpacing: '-0.01em' }],
+      },
       colors: {
         void: '#000000',
         surface: 'rgba(255,255,255,0.03)',

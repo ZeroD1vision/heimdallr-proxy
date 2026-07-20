@@ -131,7 +131,7 @@ export function CreateDrawer({ onClose, onCreated }: CreateDrawerProps) {
           <div className="space-y-3">
             {FORM_FIELDS.map(({ label, key, type, placeholder }) => (
               <div key={key} className="space-y-1">
-                <label className="text-[9px] uppercase tracking-[0.2em] text-white/35">
+                <label className="text-ui-nano uppercase tracking-[0.2em] text-white/35">
                   {label}
                 </label>
                 <input
@@ -153,7 +153,7 @@ export function CreateDrawer({ onClose, onCreated }: CreateDrawerProps) {
             <motion.p
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-[11px] text-red-400/80 tracking-wide"
+              className="text-ui-xs text-red-400/80 tracking-wide"
             >
               {err}
             </motion.p>
@@ -163,7 +163,7 @@ export function CreateDrawer({ onClose, onCreated }: CreateDrawerProps) {
           <button
             onClick={submit}
             disabled={loading || !form.email}
-            className="w-full py-3 rounded-xl font-jakarta font-black text-[11px] uppercase
+            className="w-full py-3 rounded-xl font-jakarta font-black text-ui-xs uppercase
               tracking-[0.25em] text-black transition-all duration-200
               hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: '#00ff88' }}

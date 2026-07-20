@@ -71,7 +71,7 @@ export function ConfirmModal({ action, onConfirm, onCancel }: ConfirmModalProps)
             <h3 className="font-jakarta font-black text-base uppercase tracking-widest text-white mb-1.5">
               {meta.title}
             </h3>
-            <p className="text-[11px] text-white/40 leading-relaxed tracking-wide">
+            <p className="text-ui-xs text-white/40 leading-relaxed tracking-wide">
               {meta.desc(action.email)}
             </p>
           </div>
@@ -80,7 +80,7 @@ export function ConfirmModal({ action, onConfirm, onCancel }: ConfirmModalProps)
           <div className="flex gap-2 pt-1">
             <button
               onClick={onCancel}
-              className="flex-1 py-2.5 rounded-xl text-[11px] font-jakarta font-bold uppercase tracking-widest
+              className="flex-1 py-2.5 rounded-xl text-ui-xs font-jakarta font-bold uppercase tracking-widest
                 text-white/40 border border-white/8 hover:border-white/20 hover:text-white/60
                 transition-all duration-200"
             >
@@ -88,7 +88,7 @@ export function ConfirmModal({ action, onConfirm, onCancel }: ConfirmModalProps)
             </button>
             <button
               onClick={onConfirm}
-              className="flex-1 py-2.5 rounded-xl text-[11px] font-jakarta font-bold uppercase tracking-widest
+              className="flex-1 py-2.5 rounded-xl text-ui-xs font-jakarta font-bold uppercase tracking-widest
                 text-black transition-all duration-200 hover:brightness-110"
               style={{ background: meta.color }}
             >

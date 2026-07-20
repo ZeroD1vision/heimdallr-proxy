@@ -25,7 +25,7 @@ export function TrafficBar({ used, limit }: TrafficBarProps) {
   // Безлимитный тариф — просто символ
   if (!limit) {
     return (
-      <span className="text-[10px] text-white/25 tracking-widest">∞</span>
+      <span className="text-ui-xs text-white/25 tracking-widest">∞</span>
     );
   }
 
@@ -50,7 +50,7 @@ export function TrafficBar({ used, limit }: TrafficBarProps) {
       </div>
 
       {/* Числовое значение под полосой */}
-      <span className="text-[9px] text-white/25">
+      <span className="text-ui-xs text-white/25">
         {fmt(used)} / {fmt(limit)}
       </span>
     </div>
