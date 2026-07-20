@@ -185,14 +185,13 @@ export function BurningGlow({ color }: BurningGlowProps) {
           boxShadow: [
             `0 0 6px 1px ${color}, inset 0 0 2px #ef4444`,  // Минумум (Старт)
             `0 0 10px 3px ${color}, inset 0 0 4px #ef4444`,  // Максимум (Вдох)
-            `0 0 6px 1px ${color}, inset 0 0 2px #ef4444`   // Возврат в минимум
+            `0 0 3px 1px ${color}, inset 0 0 2px #ef4444`   // Возврат в минимум
           ]
         }}
         transition={{
-          opacity: { duration: 0.3, ease: 'easeOut' },
+          opacity: { duration: 0.4, ease: 'easeOut' },
           boxShadow: { 
-            repeat: Infinity, 
-            duration: 4.0, 
+            duration: 5.0, 
             ease: 'easeInOut' 
           }
         }}

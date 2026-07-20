@@ -223,7 +223,7 @@ export function NotificationBubble({
               className="flex flex-col items-start justify-center" // Выравниваем текст по левому краю внутри группы
             >
               <motion.span
-                className="text-[10px] font-syne font-medium tracking-[0.1em] uppercase text-white/75 whitespace-nowrap"
+                className="text-ui-xs font-jost font-medium tracking-[0.1em] uppercase text-white/75 whitespace-nowrap"
               >
                 {notification.message}
               </motion.span>
@@ -235,7 +235,7 @@ export function NotificationBubble({
                     initial={{ opacity: 0, height: 0, y: 2 }}
                     animate={{ opacity: 1, height: 'auto', y: 0 }}
                     exit={{ opacity: 0, height: 0, y: 2 }}
-                    className="text-[8px] font-geist-mono tracking-[0.15em] text-white/30 uppercase mt-0.5"
+                    className="text-ui-xs font-geist-mono tracking-[0.15em] text-white/30 uppercase mt-0.5"
                   >
                     dismiss
                   </motion.span>

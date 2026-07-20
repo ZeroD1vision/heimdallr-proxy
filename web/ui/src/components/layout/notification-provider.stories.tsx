@@ -51,7 +51,7 @@ function Scene({ isSmall }: { isSmall?: boolean }) {
         <NotifyControls />
         
         {/* Визуальный индикатор для теста */}
-        <div className="fixed top-4 right-4 text-[10px] text-white/20 font-mono uppercase">
+        <div className="fixed top-4 right-4 text-ui-xs text-white/20 font- uppercase">
           Mode: {isSmall ? 'Small (forced)' : 'Large'}
         </div>
       </div>
