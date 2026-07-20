@@ -29,3 +29,4 @@ make_ai_zips.sh
 ai_bundle/
 *storybook.log
 storybook-static
+web/ui/tsconfig.tsbuildinfo

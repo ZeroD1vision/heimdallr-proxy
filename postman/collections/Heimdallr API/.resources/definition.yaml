@@ -5,4 +5,4 @@ auth:
     type: bearer
     name: Bearer Token
     credentials:
-      token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0ZWxlZ3JhbV9pZCI6MTIzNTI5NTE4MSwiZXhwIjoxNzc1MDM4MDE5LCJpYXQiOjE3NzQ5NTE2MTl9.U7tfG-wOlRoRVWtYgEV41ihqcaii8vnCpjCXVyVu3-U
+      token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ3ZWJfdXNlcl9pZCI6NiwiZW1haWwiOiJ0ZXN0QHRlc3QiLCJoYXNfeHJheSI6ZmFsc2UsImV4cCI6MTc3ODUzMjA1MywiaWF0IjoxNzc4NDQ1NjUzfQ.DB86xxdNgq5FWAFnzHrACMYrFF7kHYR8Pnm3_Vw5TxA
