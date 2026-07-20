@@ -36,6 +36,7 @@ import { usePersistentStack } from '@/store/use-persistent-stack';
 import { GlowProvider, useGlow } from '@/context/glow-context';
 import { BurningGlow } from '@/components/ui/burning-glow';
 import { NAVBAR_ANIMATION_TOKENS } from '@/shared/config/animations';
+import { GlassDropdown } from '../ui/glass-dropdown';
 
 
 // ─── Геометрия острова ────────────────────────────────────────────────────────
@@ -94,7 +95,17 @@ function NavbarContent() {
     notifState === 'visible' ||
     notifState === 'changing';
 
-    console.log('[Navbar] Rendered, notifState =', notifState);
+  // Контент должен жить и рендериться только в этих фазах
+  const showContent =
+    notifState === 'expanding' ||
+    notifState === 'visible' ||
+    notifState === 'changing';
+
+  // Геометрия острова должна оставаться большой в том числе во время затухания (fadingOut)
+  const isIslandExpanded =
+    showContent ||
+    notifState === 'fadingOut';
+  console.log('[Navbar] Rendered, notifState =', notifState);
  
   // ─── Настройка навигации ────────────────────────────────────────────────────
   const navigation = {
@@ -190,20 +201,55 @@ function NavbarContent() {
     timeoutRef.current = setTimeout(() => setIsAccountOpen(false), 150);
   };
 
-  const currentTop = isNotifActive 
+  const currentTop = isIslandExpanded
   ? ISLAND_TOP[notifOrigin] // Берем из машины (small или large)
   : (isSmall ? ISLAND_TOP.small : ISLAND_TOP.large);
 
   // ─── Определение геометрии острова ────────────────────────────────────────
   // Определяем базовую (до-уведомления) форму.
   const baseShape = isSmall ? ISLAND.small : ISLAND.large;
- 
+
+  const isStackVisible = persistentItemCount > 0;
+  const baseGeometry = isIslandExpanded 
+  ? ISLAND.notif 
+  : (isSmall ? ISLAND.small : ISLAND.large);
+
+  // Cтек есть и это не 100% ширина - значит остров должен расширяться влево, чтобы вместить стек.
+  const isFullWidth = baseGeometry.width === '100%';
+  const hasStack = persistentItemCount > 0 && !isFullWidth;
+  
   // Когда уведомление активно, переопределяем ширину и высоту.
-  // Остров растёт вправо для ephemeral, расширение влево для persistent
-  // обрабатывается компонентом PersistentStack, позиционированным абсолютно слева.
+  // Остров растёт влево для persistent уведов
+
+  // Флаги состояний
+  // Слева расширяем ТОЛЬКО если это не 100% (в small режиме или в notif)
+  const needsLeftExtension = hasStack && !isFullWidth;
+  // Справа расширяем ТОЛЬКО на время активного уведомления при наличии стека для симметрии
+  const needsRightExtension = hasStack && isIslandExpanded;
+
+  // Вычисляем финальную ширину
+  let calculatedWidth = baseGeometry.width;
+  if (needsLeftExtension || needsRightExtension) {
+    const basePixels = parseInt(baseGeometry.width, 10);
+    const leftAdd = needsLeftExtension ? NAVBAR_ANIMATION_TOKENS.NAVBAR_STACK_GAP : 0;
+    const rightAdd = needsRightExtension ? NAVBAR_ANIMATION_TOKENS.NAVBAR_STACK_GAP : 0;
+    calculatedWidth = basePixels + leftAdd + rightAdd + 'px';
+  }
+
+  // Вычисляем сдвиг по X (offsetX)
+  // Если расширение симметрично с двух сторон (в notif), сдвиг равен 0, плашка растет из центра.
+  // Если расширение только слева (в small), сдвигаем влево на половину шага.
+  let offsetX = 0;
+  if (needsLeftExtension && !needsRightExtension) {
+    offsetX = -NAVBAR_ANIMATION_TOKENS.NAVBAR_STACK_GAP / 2;
+  }
+
   const islandAnimate = {
-    ...(isNotifActive ? ISLAND.notif : (isSmall ? ISLAND.small : ISLAND.large)),
-    top: currentTop, // Привязываем верх к расчетной линии центра
+    width: calculatedWidth,
+    height: baseGeometry.height,
+    borderRadius: baseGeometry.borderRadius,
+    top: currentTop,
+    x: offsetX,
   };
  
   // Сигнал ANIMATION_END: срабатывает, когда остров завершает расширение или сжатие.
@@ -230,12 +276,6 @@ function NavbarContent() {
           Оба обёрнуты в относительный контейнер для выравнивания.
         */}
         <div className="absolute inset-0 flex justify-center pointer-events-none z-0">
- 
-          {/* ─── Стеклянный остров ────────────────────────────────────────────────────── */}
-          <div className="absolute inset-0 flex justify-center pointer-events-none z-0">
-            
-            {/* Относительный контейнер-контур для эффекта зажигания */}
-            {/* Он полностью повторяет размеры и анимацию острова, но НЕ ИМЕЕТ overflow-hidden */}
             <motion.div 
               style={{ position: 'relative' }}
               animate={{
@@ -243,6 +283,7 @@ function NavbarContent() {
                 height: islandAnimate.height,
                 top: islandAnimate.top,
                 borderRadius: islandAnimate.borderRadius,
+                x: islandAnimate.x,
               }}
               transition={{ 
                 duration: NAVBAR_ANIMATION_TOKENS.LAYOUT.DURATION_SEC, 
@@ -265,7 +306,7 @@ function NavbarContent() {
 
             {/* Пузырь уведомления — рендерится внутри острова, когда активен */}
             <AnimatePresence>
-              {isNotifActive && (
+              {showContent && (
                 <motion.div
                   initial={{ opacity: 0, width: 0 }}
                   animate={{ opacity: 1, width: 'auto' }}
@@ -296,7 +337,6 @@ function NavbarContent() {
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
         </div>
 
         {/* Логотип — контентный слой, GlassPaneContent даёт position: relative */}
@@ -318,59 +358,76 @@ function NavbarContent() {
           </Link>
         </GlassPaneContent>
 
-        {/* Центральное меню — абсолютный контейнер */}
-        <div
-          className="absolute left-1/2 -translate-x-1/2 flex items-center px-4 py-1 
-            bg-zinc-950/[0.60] border border-[#928989]/30 rounded-full backdrop-blur-2xl 
-            backdrop-saturate-[180%] shadow-2xl z-10"
-        >
-          <div className="flex text-[12px] items-center font-bold uppercase tracking-[0.25em] relative">
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center">
+          {/* 
+            КОНТЕЙНЕР СТЕКА:
+            1. Задаём ему жесткую ширину, равную нашему GAP из конфига.
+            2. Выталкиваем его влево ровно на эту же фиксированную ширину (через left-0 -translate-x-full).
+            3. Для браузера эта коробка всегда одного размера, сколько бы иконок там ни было.
+            4. mr-4 (или pr-4) дает фиксированный пробел до менюшки
+          */}
+          <div 
+            style={{ 
+              width: `${NAVBAR_ANIMATION_TOKENS.NAVBAR_STACK_GAP}px`
+             }}
+            className="absolute left-0 self-center -translate-x-full pr-4 flex items-center justify-center pointer-events-none z-20"
+          >
             <AnimatePresence>
               {persistentItemCount > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, x: 8, filter: 'blur(4px)' }}
-                  animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
-                  exit={{ opacity: 0, x: 8, filter: 'blur(4px)' }}
+                <GlassPaneContent
+                  as={motion.div}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
                   transition={{ type: 'spring', stiffness: 260, damping: 26 }}
-                  // right-full выносит иконки за левый борт капсюля, mr-4 задает зазор.
-                  // top-1/2 -translate-y-1/2 центрирует их строго по горизонтальной оси меню.
-                  className="absolute right-full -translate-y-1/2 mr-16 pointer-events-auto flex items-center"
+                  className="pointer-events-auto flex items-center whitespace-nowrap"
                 >
                   <PersistentStack visible={isNotifActive} />
-                </motion.div>
+                </GlassPaneContent>
               )}
             </AnimatePresence>
-            
-            <AnimatePresence mode="popLayout">
-              {currentTabs.map((tab) => (
-                <Link
-                  key={tab.id}
-                  href={tab.href}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`px-6 h-6 flex items-center justify-center transition-colors duration-500 relative z-10 ${
-                    activeTab === tab.id
-                      ? 'text-white'
-                      : 'text-[#a1a1aa] hover:text-zinc-100'
-                  }`}
-                >
-                  {/* Текст ссылки */}
-                  <span className="relative z-20">{tab.label}</span>
+          </div>
 
-                  {/* Акцентное стеклянное пятно */}
-                  {activeTab === tab.id && (
-                    <motion.div
-                      layoutId="active-pill"
-                      transition={{
-                        type: 'spring',
-                        stiffness: 380,
-                        damping: 28,
-                      }}
-                      className="absolute inset-0 bg-white/10 rounded-full border border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.1)] z-10"
-                    />
-                  )}
-                </Link>
-              ))}
-            </AnimatePresence>
+          {/* Центральное меню — абсолютный контейнер */}
+          <div
+            className="items-center px-4 py-1 
+              bg-zinc-950/[0.60] border border-[#928989]/30 rounded-full backdrop-blur-2xl 
+              backdrop-saturate-[180%] shadow-2xl z-10"
+          >
+
+            <div className="flex text-ui-sm items-center font-bold uppercase tracking-[0.25em] relative">
+
+              <AnimatePresence mode="popLayout">
+                {currentTabs.map((tab) => (
+                  <Link
+                    key={tab.id}
+                    href={tab.href}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-6 h-6 flex items-center justify-center transition-colors duration-500 relative z-10 ${
+                      activeTab === tab.id
+                        ? 'text-white'
+                        : 'text-[#a1a1aa] hover:text-zinc-100'
+                    }`}
+                  >
+                    {/* Текст ссылки */}
+                    <span className="relative z-20">{tab.label}</span>
+
+                    {/* Акцентное стеклянное пятно */}
+                    {activeTab === tab.id && (
+                      <motion.div
+                        layoutId="active-pill"
+                        transition={{
+                          type: 'spring',
+                          stiffness: 380,
+                          damping: 28,
+                        }}
+                        className="absolute inset-0 bg-white/10 rounded-full border border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.1)] z-10"
+                      />
+                    )}
+                  </Link>
+                ))}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
 
@@ -393,82 +450,69 @@ function NavbarContent() {
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
         >
-          <motion.div
-            animate={{
-              borderRadius: isSmall ? '20px' : '12px',
-              clipPath: `inset(0px round ${isSmall ? '20px' : '12px'})`,
-            }}
-            transition={{ type: 'spring', stiffness: 100, damping: 30 }}
-            className="w-10 h-10 flex items-center justify-center border border-white/10 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
-            style={{
-              backdropFilter: 'blur(20px) saturate(150%)',
-              WebkitBackdropFilter: 'blur(20px) saturate(150%)',
-            }}
-          >
-            <User size={16} className="text-zinc-400" />
-          </motion.div>
-
-          {/* Мостик между кнопкой и поповером */}
-          {isAccountOpen && (
-            <div className="absolute top-full left-0 w-full h-4" />
-          )}
 
           {/* Выпадающее меню аккаунта */}
-          <AnimatePresence>
-            {isAccountOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                transition={{ duration: 0.15, ease: 'easeOut' }}
-                style={{
-                  // Принудительно заставляем GPU считать этот слой отдельно
-                  isolation: 'isolate',
-                  WebkitBackdropFilter: 'blur(30px) saturate(150%)',
-                  backdropFilter: 'blur(30px) saturate(150%)',
-                }}
-                className="absolute right-0 mt-5 w-64 glass-card p-5 shadow-2xl origin-top-right"
-              >
-                <div className="space-y-4">
-                  <div className="pb-4 border-b border-white/5">
-                  <p className="text-[9px] text-zinc-400 uppercase tracking-[0.2em] mb-1">Entity Status</p>
-                  <p className="text-white font-geist-mono text-xs truncate uppercase">
-                    {isLoggedIn ? userEmail : 'Unauthorized'}
-                  </p>
+          <GlassDropdown
+          trigger={
+            <motion.div
+              animate={{
+                borderRadius: isSmall ? '20px' : '10px',
+                clipPath: `inset(0px round ${isSmall ? '20px' : '10px'})`,
+              }}
+              transition={{ type: 'spring', stiffness: 100, damping: 30 }}
+              className="w-10 h-10 flex items-center justify-center border border-white/10 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+              style={{
+                backdropFilter: 'blur(20px) saturate(150%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(150%)',
+              }}
+            >
+              <User size={16} className="text-zinc-400" />
+            </motion.div>
+          }
+          // ── Настройки дропдауна ──
+          triggerType="hover"
+          align="right"
+          offsetClass="mt-5"
+          className="w-64"
+        >
+          {/* ── Контент меню (передан напрямую как children) ── */}
+          <div className="pb-4 border-b border-white/5">
+            <p className="text-ui-nano text-zinc-400 uppercase tracking-[0.2em] mb-1">Account</p>
+            <p className="text-white font-geist-mono text-xs truncate uppercase">
+              {isLoggedIn ? userEmail : 'Unauthorized'}
+            </p>
+          </div>
+        
+          <div className="flex flex-col gap-1 mt-3">
+            {isLoggedIn ? (
+              <>
+                <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/5 mb-2">
+                  <p className="text-ui-nano text-zinc-500 uppercase tracking-widest">Balance</p>
+                  <p className="text-emerald-400 font-bold font-syne text-sm">{userBalance}</p>
                 </div>
-                  <div className="flex flex-col gap-1">
-                    {isLoggedIn ? (
-                      <>
-                        <div className="px-3 py-2 bg-white/5 rounded-lg border border-white/5 mb-2">
-                          <p className="text-[8px] text-zinc-500 uppercase tracking-widest">Balance</p>
-                          <p className="text-emerald-400 font-bold font-syne text-sm">{ userBalance }</p>
-                        </div>
-                        <AccountLink href="/dashboard" icon={<Settings size={14} />} label="Node Control" />
-                        <AccountLink href="/profile" icon={<User size={14} />} label="Profile" />
-                        <button 
-                          onClick={handleLogout}
-                          className="flex items-center gap-3 px-3 py-2 text-red-400/80 hover:bg-red-500/10 rounded-lg transition-all text-sm mt-2"
-                        >
-                          <LogOut size={14} /> Terminate Session
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => navigateToAuth('/login')}
-                          className="flex items-center gap-3 px-3 py-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-sm w-full">
-                          <LogIn size={14} /> Authorize
-                        </button>
-                        <button onClick={() => navigateToAuth('/register')}
-                          className="flex items-center gap-3 px-3 py-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-sm w-full">
-                          <UserPlus size={14} /> Initialize
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
+                <AccountLink href="/dashboard" icon={<Settings size={14} />} label="Node Control" />
+                <AccountLink href="/profile" icon={<User size={14} />} label="Profile" />
+                <button 
+                  onClick={handleLogout}
+                  className="flex items-center gap-3 px-3 py-2 text-red-400/80 hover:bg-red-500/10 rounded-lg transition-all text-sm mt-2"
+                >
+                  <LogOut size={14} /> Terminate Session
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => navigateToAuth('/login')}
+                  className="flex items-center gap-3 px-3 py-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-sm w-full text-left">
+                  <LogIn size={14} /> Authorize
+                </button>
+                <button onClick={() => navigateToAuth('/register')}
+                  className="flex items-center gap-3 px-3 py-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-all text-sm w-full text-left">
+                  <UserPlus size={14} /> Initialize
+                </button>
+              </>
             )}
-          </AnimatePresence>
+          </div>
+        </GlassDropdown>
         </GlassPaneContent>
         </div>
       </div>
