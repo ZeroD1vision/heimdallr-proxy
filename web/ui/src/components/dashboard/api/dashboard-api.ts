@@ -14,6 +14,7 @@
 
 import { tokenStorage } from '@/lib/api';
 import type { SpaceUser, ServerStats, HistoryEntry, UserStat } from '@/components/dashboard/types';
+import { handleResponseError } from '@/lib/api-error';
 
 // ─── Авторизованный HTTP-клиент ───────────────────────────────────────────────
 
@@ -46,8 +47,7 @@ export async function apiFetch<T>(path: string, opts: RequestInit = {}): Promise
   if (res.status === 204) return undefined as T;
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})); // Если там не JSON или например HTML (при ошибке)
-    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+    await handleResponseError(res);
   }
 
   return res.json() as Promise<T>;
