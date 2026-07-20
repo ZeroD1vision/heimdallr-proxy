@@ -126,7 +126,7 @@ export default function RegisterPage() {
               <a 
                 href={tgLink}
                 target="_blank"
-                className="inline-flex items-center gap-3 bg-sky-500 text-white font-syne font-bold px-8 py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-sky-400 transition-all shadow-[0_0_30px_rgba(14,165,233,0.3)]"
+                className="inline-flex items-center gap-3 bg-sky-500 text-white font-syne font-bold px-8 py-4 rounded-2xl uppercase text-ui-nano tracking-widest hover:bg-sky-400 transition-all shadow-[0_0_30px_rgba(14,165,233,0.3)]"
               >
                 <span>Access via TG</span>
               </a>
@@ -151,7 +151,7 @@ export default function RegisterPage() {
             <h2 className="font-syne font-black text-white text-3xl uppercase tracking-tighter animate-pulse">
               Activated
             </h2>
-            <p className="text-zinc-500 font-geist-mono text-[10px] mt-2 uppercase tracking-widest">
+            <p className="text-zinc-500 font-geist-mono text-[11px] mt-2 uppercase tracking-widest">
               Identity confirmed. Redirecting to node...
             </p>
           </motion.div>

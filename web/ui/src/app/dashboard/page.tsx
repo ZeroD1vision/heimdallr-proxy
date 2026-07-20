@@ -90,10 +90,10 @@ export default function DashboardPage() {
           {/* ── Заголовок страницы ── */}
           <motion.div className="flex items-end justify-between" {...fadeUp}>
             <div>
-              <p className="text-[14px] tracking-[0.2em] text-white/40 mb-1">
+              <p className="text-ui-md uppercase tracking-[0.2em] text-white/40 mb-1">
                 Node Management
               </p>
-              <h1 className="font-jakarta font-black text-4xl tracking-[0.2rem] text-white">
+              <h1 className="font-jakarta font-black text-5xl tracking-[0.2rem] text-white">
                 Space Control
               </h1>
             </div>
@@ -109,7 +109,7 @@ export default function DashboardPage() {
                   }}
                   transition={{ duration: 2, repeat: Infinity }}
                 />
-                <span className="text-[12px] uppercase tracking-[0.2em] text-white/65">
+                <span className="text-ui-sm uppercase tracking-[0.15em] text-white/65">
                   {hasError ? 'Error' : 'Live · 10s'}
                 </span>
               </div>
@@ -121,7 +121,7 @@ export default function DashboardPage() {
                 whileHover={hasError ? {} : { scale: 1.02 }}
                 whileTap={hasError ? {} : { scale: 0.98 }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl
-                  font-jakarta font-black text-[10px] uppercase tracking-[0.2em]
+                  font-jakarta font-black text-ui-xs
                   text-black transition-all duration-300
                   ${hasError ? 'opacity-30 cursor-not-allowed select-none' : ''}`}
                 style={{ background: 'var(--accent)' }}
@@ -148,14 +148,14 @@ export default function DashboardPage() {
                   
                   <div className="w-2 h-2 rounded-full bg-[#ff3b5c] animate-pulse" />
                   <div className="flex-1">
-                    <h3 className="font-geist-mono font-bold text-[11px] uppercase tracking-[0.15em] text-[#ff3b5c]">
+                    <h3 className="font-geist-mono font-bold text-ui-nano uppercase tracking-[0.15em] text-[#ff3b5c]">
                       Heimdallr Core Link Interrupted
                     </h3>
-                    <p className="text-[10px] text-white/40 font-geist-mono mt-0.5">
+                    <p className="text-ui-nano text-white/40 font-geist-mono mt-0.5">
                       Backend node unreachable (Status 500/401 or Connection Timeout). Interface entered Read-Only mode.
                     </p>
                   </div>
-                  <span className="text-[9px] font-geist-mono uppercase tracking-widest text-white/20 bg-white/5 px-2 py-1 rounded border border-white/5">
+                  <span className="text-ui-nano font-geist-mono uppercase tracking-widest text-white/20 bg-white/5 px-2 py-1 rounded border border-white/5">
                     RECONNECTING...
                   </span>
                 </div>
@@ -219,10 +219,10 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/5 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Users size={13} className="text-white/40" />
-                    <span className="font-jakarta font-bold text-[11px] uppercase tracking-[0.2em] text-white/70">
+                    <span className="font-jakarta font-bold text-ui-xs uppercase tracking-[0.2em] text-white/70">
                       Entities
                     </span>
-                    <span className="text-[9px] text-white/25 font-geist-mono">
+                    <span className="text-ui-nano text-white/25 font-geist-mono">
                       ({filtered.length})
                     </span>
                   </div>
@@ -236,7 +236,7 @@ export default function DashboardPage() {
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="w-32 bg-white/4 border border-white/8 rounded-lg
-                          pl-3 pr-8 py-1.5 text-[11px] font-geist-mono text-white/70
+                          pl-3 pr-8 py-1.5 text-ui-xs font-geist-mono text-white/70
                           placeholder:text-white/20 outline-none focus:border-white/20
                           transition-all duration-200"
                       />
@@ -256,7 +256,7 @@ export default function DashboardPage() {
                         <button
                           key={f}
                           onClick={() => setFilter(f)}
-                          className="px-2.5 py-1 rounded-lg text-[8px] uppercase tracking-[0.12em]
+                          className="px-2.5 py-1 rounded-lg text-ui-nano uppercase tracking-[0.12em]
                             font-bold transition-all duration-200"
                           style={{
                             background: filter === f ? 'rgba(255,255,255,0.1)' : 'transparent',
@@ -327,7 +327,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
                   <div className="flex items-center gap-2">
                     <Zap size={12} className="text-white/40" />
-                    <span className="font-jakarta font-bold text-[11px] uppercase tracking-[0.2em] text-white/70">
+                    <span className="font-jakarta font-bold text-ui-xs uppercase tracking-[0.2em] text-white/70">
                       Security Log
                     </span>
                   </div>

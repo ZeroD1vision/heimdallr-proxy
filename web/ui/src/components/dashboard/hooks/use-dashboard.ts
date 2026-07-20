@@ -129,7 +129,14 @@ export function useDashboard() {
       hasAnnouncedSyncErrorRef.current = false;
     } else {
       if (!hasAnnouncedSyncErrorRef.current) {
-        notify(NotificationPresets.error('Sync failed', 'dashboard_fetch'));
+        const failedResult = [usersRes, statsRes, histRes].find(
+          (r) => r.status === 'rejected'
+        ) as PromiseRejectedResult | undefined;
+
+        const originalError = failedResult?.reason;
+
+        // Отправляем настоящую ошибку в провайдер уведомлений
+        notify(NotificationPresets.apiError(originalError, 'dashboard_fetch'));
         hasAnnouncedSyncErrorRef.current = true;
       }
     }
@@ -178,10 +185,7 @@ export function useDashboard() {
       // После любого действия сразу перезагружаем список
       fetchAll();
     } catch (e: unknown) {
-      notify(NotificationPresets.error(
-        e instanceof Error ? e.message : 'Operation failed',
-        'user_action_err',
-      ));
+      notify(NotificationPresets.apiError(e, 'user_action_err'));
     }
 
     setConfirmAction(null);

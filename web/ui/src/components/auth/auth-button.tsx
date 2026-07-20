@@ -64,7 +64,7 @@ export function AuthButton({
       disabled={disabled || isLoading}
       className="
         w-full bg-white text-black
-        font-syne font-black text-[11px] uppercase tracking-[0.3em]
+        font-syne font-black text-ui-xs uppercase tracking-[0.3em]
         py-5 rounded-2xl mt-4
         hover:bg-zinc-200 active:scale-[0.98]
         transition-all duration-300

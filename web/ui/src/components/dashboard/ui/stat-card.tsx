@@ -85,7 +85,7 @@ export function StatCard({
         <GlassPaneContent className="p-5 flex flex-col gap-3">
           {/* Заголовок + иконка */}
           <div className="flex items-center justify-between">
-            <span className="text-[9px] uppercase tracking-[0.2em] text-white/35">
+            <span className="text-ui-nano uppercase tracking-[0.2em] text-white/35">
               {label}
             </span>
             <div
@@ -105,7 +105,7 @@ export function StatCard({
               {value}
             </p>
             {sub && (
-              <p className="text-[10px] text-white/25 mt-0.5 tracking-wide">{sub}</p>
+              <p className="text-ui-xs text-white/25 mt-0.5 tracking-wide">{sub}</p>
             )}
           </div>
         </GlassPaneContent>

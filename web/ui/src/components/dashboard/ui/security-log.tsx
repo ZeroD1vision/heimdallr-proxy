@@ -26,7 +26,7 @@ export function SecurityLog({ entries }: SecurityLogProps) {
     return (
       <div className="flex flex-col items-center justify-center py-12 gap-3">
         <Clock size={20} className="text-white/10" />
-        <p className="text-[10px] text-white/20 uppercase tracking-widest">No events</p>
+        <p className="text-ui-xs text-white/20 uppercase tracking-widest">No events</p>
       </div>
     );
   }
@@ -55,10 +55,10 @@ export function SecurityLog({ entries }: SecurityLogProps) {
 
           {/* Email + трафик */}
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-white/70 font-geist-mono truncate">
+            <p className="text-ui-xs text-white/70 font-geist-mono truncate">
               {h.email}
             </p>
-            <p className="text-[9px] text-white/25 mt-0.5">
+            <p className="text-ui-nano text-white/25 mt-0.5">
               <span className="text-emerald-400/60">↑{fmt(h.uplink_bytes)}</span>
               {' · '}
               <span className="text-sky-400/60">↓{fmt(h.downlink_bytes)}</span>
@@ -66,7 +66,7 @@ export function SecurityLog({ entries }: SecurityLogProps) {
           </div>
 
           {/* Время события */}
-          <span className="text-[9px] text-white/20 font-geist-mono flex-shrink-0">
+          <span className="text-ui-nano text-white/20 font-geist-mono flex-shrink-0">
             {new Date(h.recorded_at).toLocaleTimeString('en-US', {
               hour:   '2-digit',
               minute: '2-digit',
