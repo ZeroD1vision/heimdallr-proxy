@@ -76,7 +76,7 @@ export default function Scrollbar() {
             className="relative w-[2px] h-[240px] bg-white/15 rounded-full overflow-visible"
           >
             {/* Метка START */}
-            <div className="absolute -left-9 top-0 text-[8px] font-geist-mono text-zinc-600 rotate-90 origin-right tracking-[0.2em]">
+            <div className="absolute -left-9 top-0 text-ui-nano font-geist-mono text-zinc-600 rotate-90 origin-right tracking-[0.2em]">
               START
             </div>
             {/* Тягучий ползунок */}
@@ -91,7 +91,7 @@ export default function Scrollbar() {
               className="absolute -left-[3px] w-2 h-10 bg-white/30 border border-white/10 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.05)]"
             />
             {/* Метка END */}
-            <div className="absolute -left-6 bottom-0 text-[8px] font-geist-mono text-zinc-600 rotate-90 origin-right tracking-[0.2em]">
+            <div className="absolute -left-6 bottom-0 text-ui-nano font-geist-mono text-zinc-600 rotate-90 origin-right tracking-[0.2em]">
               END
             </div>
           </motion.div>
