@@ -1,6 +1,7 @@
 // src/lib/api.ts
 // Типизированный клиент к Heimdallr API.
 // Все эндпоинты описаны здесь — компоненты не знают про fetch напрямую.
+import { handleResponseError } from './api-error';
 
 const API_PORT = process.env.NEXT_PUBLIC_API_PORT || '4000';
 const BASE = `http://127.0.0.1:${API_PORT}`;
@@ -33,16 +34,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (res.status === 204) return {} as T;
 
   if (!res.ok) {
-    const text = await res.text(); // Читаем как текст, чтобы не было SyntaxError
-    console.warn(`[API] ${path} returned ${res.status}:`, text);
-    throw new Error(text || `HTTP ${res.status}`);
+    await handleResponseError(res);
   }
   const data = await res.json();
 
   return data as T;
 }
-
-// ── Auth API ──────────────────────────────────────────────────────────────────
 
 // ── Media API ────────────────────────────────────────────────────────────────
 
