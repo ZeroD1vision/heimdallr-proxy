@@ -467,7 +467,10 @@ export const notificationMachine = setup({
     // Остров схлопывается. Поведение при NOTIFY зависит от приоритета (Правило 1+Б).
     shrinking: {
       after: {
-        ANIMATION_TIMEOUT: { target: 'idle' }    // Железный возврат в idle
+        ANIMATION_TIMEOUT: { 
+          target: 'idle', 
+          actions: 'clearCurrent' 
+        } // Железный возврат в idle и очистка контекста после завершения анимации схлопывания
       },
       on: {
         ANIMATION_END: {
