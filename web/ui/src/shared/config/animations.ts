@@ -21,5 +21,7 @@ export const NAVBAR_ANIMATION_TOKENS = {
   CONTENT: {
     BUBBLE_FADE_SEC: 0.25,
     INNER_TRANSIT_SEC: 0.3,
-  }
+  },
+
+  NAVBAR_STACK_GAP: 46, // px, ширина стеклянного расширения под стек постоянных элементов
 } as const;

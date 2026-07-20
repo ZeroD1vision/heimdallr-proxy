@@ -15,7 +15,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, X, AlertTriangle, Info } from 'lucide-react';
+import { Check, X, AlertTriangle, Info, Trash2 } from 'lucide-react';
 import {
   usePersistentStack,
   selectVisibleItems,
@@ -25,14 +25,16 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 import type { NotificationIcon } from '@/store/use-notification-machine';
 import type { PersistentItem } from '@/store/use-persistent-stack';
+import { NAVBAR_ANIMATION_TOKENS } from '@/shared/config/animations';
+import { GlassDropdown } from '../ui/glass-dropdown';
 
 // ─── Карта иконок ─────────────────────────────────────────────────────────────
 
 const ICON_EL: Record<NotificationIcon, React.ReactNode> = {
-  check: <Check size={11} strokeWidth={2.5} />,
-  error: <X size={11} strokeWidth={2.5} />,
-  warn: <AlertTriangle size={10} strokeWidth={2.5} />,
-  info: <Info size={11} strokeWidth={2} />,
+  check: <Check size={14} strokeWidth={2.5} />,
+  error: <X size={14} strokeWidth={2.5} />,
+  warn: <AlertTriangle size={14} strokeWidth={2.5} />,
+  info: <Info size={14} strokeWidth={2} />,
 };
 
 const ICON_COLOR: Record<NotificationIcon, string> = {
@@ -53,8 +55,8 @@ function StackIcon({
   index: number;
   total: number;
 }) {
-  // Слои: каждая иконка смещается влево на (total - index - 1) * 6px
-  const offsetX = (total - index - 1) * 6;
+  // Слои: каждая иконка смещается влево на (total - index - 1) * 10px
+  const offsetX = (total - index - 1) * 10;
 
   return (
     <motion.div
@@ -67,87 +69,14 @@ function StackIcon({
       style={{ zIndex: index }}
       className={`
         absolute right-0
-        w-6 h-6 rounded-full
+        w-8 h-8 rounded-full
         flex items-center justify-center
         border border-white/15
-        bg-zinc-900/80 backdrop-blur-sm
+        bg-zinc-900/50 backdrop-blur-sm
         ${ICON_COLOR[item.icon]}
       `}
     >
       {ICON_EL[item.icon]}
-    </motion.div>
-  );
-}
-
-// ─── Панель деталей ───────────────────────────────────────────────────────────
-
-function DetailPanel() {
-  const items = usePersistentStack((s) => s.items);
-  const dismiss = usePersistentStack((s) => s.dismiss);
-  const clearAll = usePersistentStack((s) => s.clearAll);
-  const closePanel = usePersistentStack((s) => s.closePanel);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 6, scale: 0.96 }}
-      transition={{ duration: 0.18, ease: 'easeOut' }}
-      style={{
-        backdropFilter: 'blur(24px) saturate(150%)',
-        WebkitBackdropFilter: 'blur(24px) saturate(150%)',
-      }}
-      className="
-        absolute right-0 top-full mt-3
-        w-72 rounded-2xl
-        border border-white/10
-        bg-zinc-950/70
-        shadow-2xl p-4 z-50
-        origin-top-right
-      "
-    >
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[10px] font-syne uppercase tracking-[0.2em] text-zinc-400">
-          Уведомления
-        </span>
-        {items.length > 0 && (
-          <button
-            onClick={clearAll}
-            className="text-[9px] uppercase tracking-widest text-zinc-500 hover:text-white transition-colors"
-          >
-            Очистить всё
-          </button>
-        )}
-      </div>
-
-      {items.length === 0 ? (
-        <p className="text-[11px] text-zinc-600 text-center py-4">
-          Нет уведомлений
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {items.map((item) => (
-            <li
-              key={item.id}
-              className="flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-white/5 transition-colors group"
-            >
-              <span className={`mt-0.5 flex-shrink-0 ${ICON_COLOR[item.icon]}`}>
-                {ICON_EL[item.icon]}
-              </span>
-              <span className="flex-1 text-[11px] text-zinc-300 leading-relaxed">
-                {item.message}
-              </span>
-              <button
-                onClick={() => dismiss(item.id)}
-                className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-600 hover:text-white mt-0.5"
-                aria-label="Закрыть"
-              >
-                <X size={10} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </motion.div>
   );
 }
@@ -163,63 +92,127 @@ export function PersistentStack({ visible }: PersistentStackProps) {
   const visibleItems = usePersistentStack(useShallow(selectVisibleItems));
   const overflowCount = usePersistentStack(selectOverflowCount);
   const totalCount = usePersistentStack(selectTotalCount);
-  const isPanelOpen = usePersistentStack((s) => s.isPanelOpen);
-  const togglePanel = usePersistentStack((s) => s.togglePanel);
-  const closePanel = usePersistentStack((s) => s.closePanel);
-
+  const items = usePersistentStack((s) => s.items);
+  const dismiss = usePersistentStack((s) => s.dismiss);
+  const clearAll = usePersistentStack((s) => s.clearAll);
+  
   if (totalCount === 0) return null;
+
+  // Текущая физическая ширина самого стека иконок
+  const iconSize = 32;
+  const overlapStep = 10;
+  const stackWidth = visibleItems.length > 0 
+    ? iconSize + (visibleItems.length - 1) * overlapStep 
+    : 0;
+    
+  // Формула центрирования:
+  // Вычисляем точку, чтобы центр стека совпал с центром 46-пиксельного ушка слева от острова.
+  const stackGap = NAVBAR_ANIMATION_TOKENS.NAVBAR_STACK_GAP;
+  const centerTargetX = (stackGap - stackWidth) / 2;
 
   return (
     <div className="relative flex items-center">
       {/* Контейнер стека иконок — фиксированная ширина вмещает до 3 перекрывающихся иконок */}
-      <motion.button
-        onClick={togglePanel}
-        animate={{ opacity: 1, x: 0 }}
-        initial={{ opacity: 0, x: 8 }}
-        transition={{ type: 'spring', stiffness: 260, damping: 22 }}
-        style={{ width: `${16 + visibleItems.length * 6}px`, height: '24px' }}
-        className="relative flex items-center justify-end"
-        aria-label={`${totalCount} persistent notification${totalCount !== 1 ? 's' : ''}`}
+      <GlassDropdown
+        triggerType="hover"
+        align="right"
+        offsetClass="mt-6"
+        className="w-64"
+        trigger={
+          // Контейнер по ширине стека
+          <div 
+            style={{ width: `${stackWidth}px`, height: '32px' }}
+            className="relative flex items-center justify-end cursor-pointer"
+          >
+            <AnimatePresence>
+              {visibleItems.map((item, index) => (
+                <StackIcon
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  total={visibleItems.length}
+                />
+              ))}
+            </AnimatePresence>
+
+            {/* Бейдж переполнения */}
+            <AnimatePresence>
+              {overflowCount > 0 && (
+                <motion.span
+                  key="badge"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  className="
+                    absolute -top-1.5 -right-1.5
+                    min-w-[14px] h-[14px] px-[3px]
+                    rounded-full bg-red-500 text-white
+                    text-ui-nano font-bold font-geist-mono
+                    flex items-center justify-center leading-none z-50
+                  "
+                >
+                  {overflowCount > 9 ? '9+' : overflowCount}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
+        }
       >
-        <AnimatePresence>
-          {visibleItems.map((item, index) => (
-            <StackIcon
-              key={item.id}
-              item={item}
-              index={index}
-              total={visibleItems.length}
-            />
-          ))}
-        </AnimatePresence>
+        {/* ─── Контент выпадающего меню (как у меню аккаунта) ─── */}
+        <div className="border-white/5">
+          {/* Шапка меню */}
+          <div className="pb-3 border-b border-white/5 flex items-center justify-between">
+            <div>
+              <p className="text-ui-nano text-zinc-400 uppercase tracking-[0.2em] mb-0.5">
+                Notifications
+              </p>
+              <h4 className="text-ui-xs font-bold text-white uppercase font-geist-mono">
+                Notifications ({totalCount})
+              </h4>
+            </div>
+            {items.length > 0 && (
+              <button
+                onClick={clearAll}
+                className="text-ui-nano text-zinc-500 hover:text-red-400 transition-colors flex items-center gap-1 uppercase tracking-wider"
+              >
+                <Trash2 size={10} /> Clear
+              </button>
+            )}
+          </div>
 
-        {/* Бейдж переполнения */}
-        <AnimatePresence>
-          {overflowCount > 0 && (
-            <motion.span
-              key="badge"
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0 }}
-              className="
-                absolute -top-2 -right-1
-                min-w-[14px] h-[14px] px-[3px]
-                rounded-full
-                bg-red-500 text-white
-                text-[8px] font-bold font-geist-mono
-                flex items-center justify-center
-                leading-none
-              "
-            >
-              {overflowCount > 9 ? '9+' : overflowCount}
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </motion.button>
-
-      {/* Панель деталей */}
-      <AnimatePresence>
-        {isPanelOpen && <DetailPanel />}
-      </AnimatePresence>
+          {/* Список уведомлений */}
+          <div className="flex flex-col gap-1 mt-3 max-h-[240px] overflow-y-auto pr-1 custom-scrollbar">
+            {items.length === 0 ? (
+              <p className="text-ui-nano text-zinc-600 text-center py-4 uppercase tracking-widest">
+                Stack Empty
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {items.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-start gap-2.5 p-2 rounded-lg bg-white/0 hover:bg-white/5 border border-transparent hover:border-white/5 transition-all group"
+                  >
+                    <span className={`mt-0.5 flex-shrink-0 ${ICON_COLOR[item.icon]}`}>
+                      {ICON_EL[item.icon]}
+                    </span>
+                    <span className="flex-1 text-ui-xs text-zinc-300 font-geist-mono leading-normal break-words">
+                      {item.message}
+                    </span>
+                    <button
+                      onClick={() => dismiss(item.id)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-500 hover:text-white mt-0.5"
+                      aria-label="Dismiss"
+                    >
+                      <X size={12} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </GlassDropdown>
     </div>
   );
 }
