@@ -14,7 +14,7 @@ import (
 const (
 	writeWait      = 10 * time.Second
 	pongWait       = 30 * time.Second
-	pingPeriod     = (pongWait * 9) / 10
+	pingWait       = pongWait * 9 / 10
 	maxMessageSize = 512
 )
 
@@ -29,7 +29,11 @@ type WSManager struct {
 	clients    map[int64]map[*Client]bool
 	register   chan *Client
 	unregister chan *Client
-	notifier   chan models.WSEvent
+	notifier   chan models.Event
+}
+
+type WSNotifier struct {
+	manager *WSManager
 }
 
 type Client struct {
@@ -43,13 +47,17 @@ type Client struct {
 func NewWSManager() *WSManager {
 	return &WSManager{
 		clients:    make(map[int64]map[*Client]bool),
-		notifier:   make(chan models.WSEvent, 256),
+		notifier:   make(chan models.Event, 256),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 	}
 }
 
-func (m *WSManager) Notify(event models.WSEvent) {
+
+func (m *WSManager) Notify(event models.Event) {
+	if event.Timestamp == 0 {
+		event.Timestamp = time.Now().Unix()
+	}
 	m.notifier <- event
 }
 
@@ -83,7 +91,7 @@ func (m *WSManager) Run() {
 
 			payload, err := json.Marshal(event)
 			if err != nil {
-				slog.Error("Failed to marshal event", "error", err)
+				slog.Error("failed to marshal ws event", "error", err, "type", event.Type)
 				continue
 			}
 
@@ -99,7 +107,63 @@ func (m *WSManager) Run() {
 	}
 }
 
+func (c *Client) writeToSocket() {
+	ticker := time.NewTicker(pingWait)
+	defer func() {
+		ticker.Stop()
+		c.Close()
+	}()
+
+	for {
+		select {
+		case message, ok := <-c.send:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+
+			if !ok {
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+
+			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				slog.Error("ws write error", "error", err, "owner_id", c.ownerID)
+				return
+			}
+
+		case <-ticker.C:
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				slog.Error("ws ping error", "error", err, "owner_id", c.ownerID)
+				return
+			}
+		}
+	}
+}
+
+func (c *Client) readFromSocket() {
+	defer func() {
+		c.manager.unregister <- c
+		c.Close()
+	}()
+	c.conn.SetReadLimit(maxMessageSize)
+	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
+
+	for {
+		if _, _, err := c.conn.ReadMessage(); err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				slog.Warn("ws unexpected close", "error", err, "owner_id", c.ownerID)
+			}
+			break
+		}
+	}
+}
+
 // Вспомогаетльные функции
+
+// Закрывает соединение с клиентом и очищает ресурсы безопасно для многопоточности с использованием sync.Once.
 func (c *Client) Close() {
 	c.closeOnce.Do(func() {
 		close(c.send)
