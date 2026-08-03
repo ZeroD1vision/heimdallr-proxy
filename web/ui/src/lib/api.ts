@@ -4,7 +4,10 @@
 import { handleResponseError } from './api-error';
 
 const API_PORT = process.env.NEXT_PUBLIC_API_PORT || '4000';
-const BASE = `http://127.0.0.1:${API_PORT}`;
+// const BASE = `http://127.0.0.1:${API_PORT}`;
+
+const isDev = process.env.NODE_ENV === 'development';
+const BASE = isDev ? `http://127.0.0.1:${API_PORT}` : '';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
