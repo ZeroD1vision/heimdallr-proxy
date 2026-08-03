@@ -110,10 +110,15 @@ func main() {
 	// Pipeline управляет очередью задач и многопоточным выполнением
 	enforcePipeline := collector.NewPipeline(bouncer, 3) // 3 воркера
 
+	// Запуск WSManager для проброса событий (пока что только для сбора трафика)
+	eventNotifier := api.NewWSManager() 
+	go eventNotifier.Run()
+
+
 	// -------------------------------------------------------------------------
 	// 7. Коллектор — фоновый сбор статистики в БД
 	// -------------------------------------------------------------------------
-	statsCollector := collector.NewCollector(store, xrayClient, presence, enforcePipeline, cfg.collectInterval)
+	statsCollector := collector.NewCollector(store, eventNotifier, xrayClient, presence, enforcePipeline, cfg.collectInterval)
 
 	collectorCtx, collectorCancel := context.WithCancel(context.Background())
 	defer collectorCancel()
@@ -138,6 +143,7 @@ func main() {
 		store,      // OTPStore
 		store,      // SessionStore
 		tgBot,      // Notifier
+		eventNotifier,
 		cfg.staticDir,
 	)
 
