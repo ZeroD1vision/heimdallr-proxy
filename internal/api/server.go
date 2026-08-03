@@ -90,22 +90,23 @@ type PresenceProvider interface {
 
 // --- Структура сервера ---
 type Server struct {
-	router          *echo.Echo
-	port            string
-	apiKey          string // статичный токен для Postman/CI
-	jwtSecret       string // секрет для подписи JWT выдаваемых после 2FA
-	adminEmail      string
-	adminTelegramID int64
-	statsProvider   StatsProvider
-	historyProvider HistoryProvider
-	userStore       UserStore
-	webUserStore    WebUserStore // веб-аккаунты
-	xrayUsers       XrayUserManager
-	presence        PresenceProvider
-	otpStore        OTPStore
-	sessionStore    SessionStore // auth-сессии
-	notifier        Notifier
-	staticDir       string // директория со статикой фронтенда
+	router             *echo.Echo
+	port               string
+	apiKey             string // статичный токен для Postman/CI
+	jwtSecret          string // секрет для подписи JWT выдаваемых после 2FA
+	adminEmail         string
+	adminTelegramID    int64
+	statsProvider      StatsProvider
+	historyProvider    HistoryProvider
+	userStore          UserStore
+	webUserStore       WebUserStore // веб-аккаунты
+	xrayUsers          XrayUserManager
+	presence           PresenceProvider
+	otpStore           OTPStore
+	sessionStore       SessionStore // auth-сессии
+	notifier           Notifier
+	metricsConnManager *WSManager // менеджер соединений для метрик (пока что ws)
+	staticDir          string     // директория со статикой фронтенда
 }
 
 // NewServer принимает готовые зависимости. Никаких os.Getenv внутри пакета.
@@ -120,6 +121,7 @@ func NewServer(
 	otpStore OTPStore,
 	sessionStore SessionStore,
 	notifier Notifier,
+	metricsConnManager *WSManager,
 	staticDir string,
 ) *Server {
 	e := echo.New()
@@ -129,21 +131,22 @@ func NewServer(
 	e.Use(requestLogger())
 
 	return &Server{
-		router:          e,
-		port:            port,
-		apiKey:          apiKey,
-		jwtSecret:       jwtSecret,
-		adminEmail:      adminEmail,
-		statsProvider:   statsProvider,
-		historyProvider: historyProvider,
-		userStore:       userStore,
-		webUserStore:    webUserStore,
-		xrayUsers:       xrayUsers,
-		presence:        presence,
-		otpStore:        otpStore,
-		sessionStore:    sessionStore,
-		notifier:        notifier,
-		staticDir:       staticDir,
+		router:          	e,
+		port:            	port,
+		apiKey:          	apiKey,
+		jwtSecret:       	jwtSecret,
+		adminEmail:      	adminEmail,
+		statsProvider:   	statsProvider,
+		historyProvider: 	historyProvider,
+		userStore:       	userStore,
+		webUserStore:    	webUserStore,
+		xrayUsers:       	xrayUsers,
+		presence:        	presence,
+		otpStore:        	otpStore,
+		sessionStore:    	sessionStore,
+		notifier:        	notifier,
+		metricsConnManager: metricsConnManager,
+		staticDir:          staticDir,
 	}
 }
 
@@ -180,6 +183,7 @@ func (s *Server) setupRoutes() {
 	g := s.router.Group("/api", s.authMiddleware())
 	g.GET("/stats", s.handleStats)
 	g.GET("/history", s.handleHistory)
+	g.GET("/ws", s.handleWebSocket)
 
 	// ── Статика — Next.js build ───────────────────────────────────────────────
 	s.router.Static("/", s.staticDir)
@@ -584,7 +588,13 @@ func (s *Server) authMiddleware() echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			authHeader := c.Request().Header.Get("Authorization")
 			if authHeader == "" {
-				return c.JSON(http.StatusUnauthorized, errResp("unauthorized"))
+				// Фолбек на случай ws соединений. Токен передается в query параметре ?token=...
+				queryToken := c.QueryParam("token")
+				if queryToken != "" {
+					authHeader = "Bearer " + queryToken
+				} else {
+					return c.JSON(http.StatusUnauthorized, errResp("unauthorized"))
+				}
 			}
 
 			// Проверяем статический API-ключ (Bearer <api_key>).
@@ -709,6 +719,29 @@ func (s *Server) handleHistory(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
 	}
 	return c.JSON(http.StatusOK, history)
+}
+
+// handleWebSocket инициализирует WS-соединение для авторизованного клиента.
+func (s *Server) handleWebSocket(c echo.Context) error {
+	conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
+	if err != nil {
+		slog.Error("ws upgrade failed", "error", err, "ip", c.RealIP())
+		return err // Echo корректно обработает ошибку Upgrade
+	}
+
+	client := &Client{
+		manager:  s.metricsConnManager,
+		conn: conn,
+		send: make(chan []byte, 256),
+	}
+	
+	client.manager.register <- client
+
+	// Запускаем горутины чтения/записи для клиента
+	go client.writeToSocket()
+	go client.readFromSocket()
+
+	return nil
 }
 
 // --- Users handlers ---
