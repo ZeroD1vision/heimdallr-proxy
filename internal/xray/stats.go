@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -149,9 +150,11 @@ func (c *Client) AddUser(ctx context.Context, user models.User) error {
 
 // RemoveUser удаляет пользователя из указанного inbound по email.
 func (c *Client) RemoveUser(ctx context.Context, inboundTag, email string) error {
+	// ensureConnected проверяет соединение и переподключается если нужно.
 	if err := c.ensureConnected(); err != nil {
 		return err
 	}
+	// Проверяем входные параметры, чтобы не сломать Xray пустыми значениями.
 	if inboundTag == "" {
 		return fmt.Errorf("inbound tag must not be empty")
 	}
@@ -169,6 +172,11 @@ func (c *Client) RemoveUser(ctx context.Context, inboundTag, email string) error
 		}),
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			// Идемпотентность. Если пользователя нет в inbound, считаем что он уже удалён.
+			slog.Warn("xray remove user: user was not in xray inbound, skipping", "email", email, "tag", inboundTag)
+			return nil
+		}
 		return fmt.Errorf("xray remove user %s from inbound %s: %w", email, inboundTag, err)
 	}
 
