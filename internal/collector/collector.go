@@ -35,11 +35,16 @@ type PresenceStore interface {
 }
 
 type Collector struct {
-	store    CollectorStore
-	xray     XrayClient
-	presence PresenceStore
-	pipeline *Pipeline
-	interval time.Duration
+	store         CollectorStore
+	eventNotifier EventNotifier
+	xray     	  XrayClient
+	presence 	  PresenceStore
+	pipeline 	  *Pipeline
+	interval 	  time.Duration
+}
+
+type EventNotifier interface {
+	Notify(event models.Event)
 }
 
 // NewCollector собирает фоновый job, который раз в interval опрашивает Xray и синхронизирует состояние.
@@ -48,13 +53,22 @@ type Collector struct {
 // Он принимает pipeline — это наша точка входа в асинхронную обработку.
 // Мы не блокируем основной цикл сбора (tick) тяжелыми операциями блокировки,
 // а просто выкидываем задачу в пайплайн.
-func NewCollector(store CollectorStore, xray XrayClient, presence PresenceStore, pipe *Pipeline, interval time.Duration) *Collector {
+// TODO: Добавить комментарий насчет ws интеграции
+func NewCollector(
+		store 	      CollectorStore, 
+		eventNotifier EventNotifier, 
+		xray 		  XrayClient, 
+		presence 	  PresenceStore, 
+		pipe 		  *Pipeline, 
+		interval 	  time.Duration,
+) *Collector {
 	return &Collector{
-		store:    store,
-		xray:     xray,
-		presence: presence,
-		pipeline: pipe,
-		interval: interval,
+		store:    	   store,
+		eventNotifier: eventNotifier,
+		xray:     	   xray,
+		presence: 	   presence,
+		pipeline: 	   pipe,
+		interval: 	   interval,
 	}
 }
 
@@ -111,6 +125,17 @@ func (c *Collector) tick(ctx context.Context) {
 		// Обновляем статистику и автоматически меняем online/offline на основе прироста трафика
 		if c.presence != nil {
 			c.presence.SetStats(user.Email, stats.Uplink, stats.Downlink)
+			// Забираем булевый флаг онлайна из кеша
+			stats.Online = c.presence.IsOnline(user.Email)
+		}
+
+		// Отправляем событие в WS-менеджер
+		if c.eventNotifier != nil && stats.Online {
+    		c.eventNotifier.Notify(models.Event{
+    		    Type: "METRICS_UPDATE",
+				Timestamp: time.Now().Unix(),
+    		    Payload: stats, // готовая структура UserStats
+    		})
 		}
 
 		// Лимит: Downlink + Uplink
