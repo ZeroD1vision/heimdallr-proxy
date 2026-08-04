@@ -30,7 +30,7 @@ type XrayClient interface {
 // PresenceStore — минимальный контракт для кэша online/offline статусов и текущих счетчиков трафика.
 // Коллектор пишет в этот кэш после каждой попытки опроса Xray.
 type PresenceStore interface {
-	SetStats(email string, uplink, downlink int64)
+	SetStats(email string, uplink, downlink int64) (isOnline bool, shouldNotify bool)
 	IsOnline(email string) bool
 }
 
@@ -124,18 +124,17 @@ func (c *Collector) tick(ctx context.Context) {
 
 		// Обновляем статистику и автоматически меняем online/offline на основе прироста трафика
 		if c.presence != nil {
-			c.presence.SetStats(user.Email, stats.Uplink, stats.Downlink)
-			// Забираем булевый флаг онлайна из кеша
-			stats.Online = c.presence.IsOnline(user.Email)
-		}
+			isOnline, shouldNotify := c.presence.SetStats(user.Email, stats.Uplink, stats.Downlink)
+			stats.Online = isOnline
 
-		// Отправляем событие в WS-менеджер
-		if c.eventNotifier != nil && stats.Online {
-    		c.eventNotifier.Notify(models.Event{
-    		    Type: "METRICS_UPDATE",
-				Timestamp: time.Now().Unix(),
-    		    Payload: stats, // готовая структура UserStats
-    		})
+			// Отправляем событие в WS-менеджер
+			if c.eventNotifier != nil && shouldNotify {
+    			c.eventNotifier.Notify(models.Event{
+    			    Type: "METRICS_UPDATE",
+					Timestamp: time.Now().Unix(),
+    			    Payload: stats, // готовая структура UserStats
+    			})
+			}
 		}
 
 		// Лимит: Downlink + Uplink

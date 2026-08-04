@@ -13,6 +13,7 @@ type userPresence struct {
 	lastActivity  time.Time
 	totalUplink   int64
 	totalDownlink int64
+	wasOnline     bool
 }
 
 // PresenceCache — in-memory кэш онлайн-статусов и трафика.
@@ -38,27 +39,42 @@ func NewPresenceCache() *PresenceCache {
 // SetStats обновляет статистику и время последней активности.
 // Если трафик изменился (новые данные больше предыдущих) — обновляем lastActivity.
 // Если трафик не изменился — lastActivity остается как была.
-func (p *PresenceCache) SetStats(email string, uplink, downlink int64) {
+// Возвращает:
+// isOnline — активен ли юзер прямо сейчас
+// shouldNotify — нужно ли отправлять ивент в WS
+func (p *PresenceCache) SetStats(email string, uplink, downlink int64) (isOnline bool, shouldNotify bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	prev, exists := p.state[email]
 	now := time.Now()
 
-	// Проверяем, был ли прирост трафика
+	// 1. Проверяем, был ли прирост трафика
 	hasNewTraffic := uplink > prev.totalUplink || downlink > prev.totalDownlink
 
-	// Обновляем время активности только если есть новый трафик
+	// 2. Обновляем время активности только если есть новый трафик
 	lastActivity := prev.lastActivity
 	if hasNewTraffic || !exists {
 		lastActivity = now
 	}
 
+	// 3. Определяем текущий онлайн-статус
+	isOnline = now.Sub(lastActivity) < p.timeout
+
+	// 4. Определяем, нужно ли уведомлять о смене статуса
+	//    - Есть новый трафик
+	//    - Или изменился статус (например, перешел из online в offline)
+	//    - Или это первая запись юзера
+	shouldNotify = hasNewTraffic || (prev.wasOnline != isOnline) || !exists
+
 	p.state[email] = userPresence{
 		lastActivity:  lastActivity,
 		totalUplink:   uplink,
 		totalDownlink: downlink,
+		wasOnline:     isOnline,
 	}
+
+	return isOnline, shouldNotify
 }
 
 // IsOnline быстро проверяет, был ли пользователь активен в пределах timeout.
