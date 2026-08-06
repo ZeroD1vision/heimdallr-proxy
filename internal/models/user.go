@@ -13,6 +13,7 @@ import (
 // чтобы исключить доверие к внешнему вводу.
 type User struct {
 	ID         uint   `json:"id"             gorm:"primaryKey"`
+	OwnerID	   int64  `json:"owner_id"       gorm:"index;not null"`
 	Email      string `json:"email"          gorm:"uniqueIndex;not null"`
 	TelegramID *int64 `json:"telegram_id"    gorm:"uniqueIndex"`
 	// UUID хранится в legacy-совместимой колонке xray_uuid.

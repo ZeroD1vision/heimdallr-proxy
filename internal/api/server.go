@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	dbstore "github.com/ZeroD1vision/heimdallr-proxy/internal/db"
@@ -84,6 +85,8 @@ type XrayUserManager interface {
 // по каждому юзеру и агрегирует сам если нужно.
 type PresenceProvider interface {
 	IsOnline(email string) bool
+	RemoveUser(ownerID int64, email string)
+	GetStatsByOwner(ownerID int64) []models.UserStats
 	// GetAllStats возвращает срез со статистикой каждого пользователя из кэша.
 	GetAllStats() []models.UserStats
 }
@@ -226,15 +229,16 @@ type registerResponse struct {
 func (s *Server) handleRegister(c echo.Context) error {
 	var input registerInput
 	if err := c.Bind(&input); err != nil {
-		fmt.Println("Failed to bind register input:", err)
+		// Debug, потому что это кривые запрос от клиента, а не сбой сервера
+		slog.Debug("register: invalid request body", "error", err, "ip", c.RealIP())
 		return c.JSON(http.StatusBadRequest, errResp("invalid request body"))
 	}
 	if input.Email == "" || input.Password == "" {
-		fmt.Println("Email or password is empty")
+		slog.Debug("email or password is empty", "email", input.Email)
 		return c.JSON(http.StatusBadRequest, errResp("email and password are required"))
 	}
 	if len(input.Password) < 8 {
-		fmt.Println("Password is too short")
+		slog.Debug("password is too short", "email", input.Email)
 		return c.JSON(http.StatusBadRequest, errResp("password must be at least 8 characters"))
 	}
 
@@ -242,11 +246,9 @@ func (s *Server) handleRegister(c echo.Context) error {
 
 	// Проверяем уникальность email перед тяжёлой операцией bcrypt
 	if _, err := s.webUserStore.GetWebUserByEmail(ctx, input.Email); !errors.Is(err, dbstore.ErrNotFound) {
-		fmt.Println("Email already registered:", input.Email)
 		// err == nil означает что пользователь найден — email занят
 		// Любая другая ошибка — возвращаем 500
 		if err == nil {
-			fmt.Println("Email already registered:", input.Email)
 			return c.JSON(http.StatusConflict, errResp("email already registered"))
 		}
 		slog.Error("register: db lookup failed", "error", err)
@@ -599,6 +601,7 @@ func (s *Server) authMiddleware() echo.MiddlewareFunc {
 
 			// Проверяем статический API-ключ (Bearer <api_key>).
 			if secureCompare(authHeader, "Bearer "+s.apiKey) {
+				c.Set("claims", &jwtClaims{WebUserID: 0, Email: "system_admin"}) // Для скриптов и Postman — claims с WebUserID=0
 				return next(c)
 			}
 
@@ -614,7 +617,7 @@ func (s *Server) authMiddleware() echo.MiddlewareFunc {
 				return c.JSON(http.StatusUnauthorized, errResp("unauthorized"))
 			}
 
-			// Кладём claims в контекст — хендлеры могут использовать для персонализации.
+			// Кладём claims в контекст - хендлеры могут использовать для персонализации.
 			c.Set("claims", claims)
 			return next(c)
 		}
@@ -626,6 +629,20 @@ func requestLogger() echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			start := time.Now()
 			err := next(c)
+			reqPath := c.Request().URL.Path
+			latency := time.Since(start).Milliseconds()
+
+			// Если это поллинг статуса — пишем в DEBUG
+			if strings.HasPrefix(reqPath, "/api/auth/status") {
+				slog.Debug("http polling",
+					"path", reqPath,
+					"status", c.Response().Status,
+					"ms", latency,
+				)
+				return err
+			}
+
+			// Все остальные запросы пишем в INFO
 			slog.Info("http",
 				"method", c.Request().Method,
 				"path", c.Request().URL.Path,
@@ -697,7 +714,17 @@ func (s *Server) parseJWT(tokenStr string) (*jwtClaims, error) {
 
 // GET /api/stats — статистика в текущий момент
 func (s *Server) handleStats(c echo.Context) error {
-	return c.JSON(http.StatusOK, s.presence.GetAllStats())
+	claims, ok := c.Get("claims").(*jwtClaims)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, errResp("unauthorized"))
+	}
+
+	// TODO: Можно потом сделать всетаки сбор allStats для суперадмина, но пока не хочу, смысл то есть.
+	// allStats := s.presence.GetAllStats() 
+	
+	// Отдает O(K) за наносекунды без перебора всей базы
+	stats := s.presence.GetStatsByOwner(int64(claims.WebUserID))
+	return c.JSON(http.StatusOK, stats)
 }
 
 // GET /api/history?limit=100 — история из БД
@@ -723,19 +750,29 @@ func (s *Server) handleHistory(c echo.Context) error {
 
 // handleWebSocket инициализирует WS-соединение для авторизованного клиента.
 func (s *Server) handleWebSocket(c echo.Context) error {
+	// 1. Достаем claims, которые положил authMiddleware
+	claimsVal := c.Get("claims")
+	claims, ok := claimsVal.(*jwtClaims)
+	if !ok || claims == nil {
+		slog.Error("ws handshake failed: claims not found in context")
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+	}
+	
 	conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
 	if err != nil {
 		slog.Error("ws upgrade failed", "error", err, "ip", c.RealIP())
 		return err // Echo корректно обработает ошибку Upgrade
 	}
 
-	client := &Client{
+	client := &WSClient{
 		manager:  s.metricsConnManager,
-		conn: conn,
-		send: make(chan []byte, 256),
+		ownerID:  int64(claims.WebUserID),
+		conn: 	  conn,
+		send: 	  make(chan []byte, 256),
 	}
 	
 	client.manager.register <- client
+	slog.Info("ws client connected", "client_owner_id", client.ownerID)
 
 	// Запускаем горутины чтения/записи для клиента
 	go client.writeToSocket()
@@ -754,6 +791,11 @@ type adminUserView struct {
 
 // POST /api/admin/users — создание нового пользователя
 func (s *Server) handleAdminCreateUser(c echo.Context) error {
+	claims, ok := c.Get("claims").(*jwtClaims)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+
 	var input createUserInput
 	if err := c.Bind(&input); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -764,6 +806,7 @@ func (s *Server) handleAdminCreateUser(c echo.Context) error {
 
 	user := models.User{
 		Email:        input.Email,
+		OwnerID:  	  int64(claims.WebUserID),	
 		TelegramID:   input.TelegramID,
 		InboundTag:   input.InboundTag,
 		VlessFlow:    input.VlessFlow,
@@ -825,11 +868,21 @@ func (s *Server) handleAdminDeleteUser(c echo.Context) error {
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": "xray remove user failed"})
 	}
 
+	// Удаление пользователя из карт byEmail и byOwnerID в кеше presence
+	if s.presence != nil {
+		s.presence.RemoveUser(user.OwnerID, user.Email)
+	}
+
 	return c.NoContent(http.StatusNoContent)
 }
 
 // GET /api/admin/users — список всех пользователей
 func (s *Server) handleAdminListUsers(c echo.Context) error {
+	claims, ok := c.Get("claims").(*jwtClaims)
+	if !ok || claims == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	}
+
 	users, err := s.userStore.GetAllUsers(c.Request().Context())
 	if err != nil {
 		slog.Error("admin list users: fetch failed", "error", err)
@@ -838,6 +891,10 @@ func (s *Server) handleAdminListUsers(c echo.Context) error {
 
 	out := make([]adminUserView, 0, len(users))
 	for _, u := range users {
+		if u.OwnerID != int64(claims.WebUserID) {
+			continue
+		}
+
 		status := "offline"
 		if u.IsBlocked {
 			status = "blocked"

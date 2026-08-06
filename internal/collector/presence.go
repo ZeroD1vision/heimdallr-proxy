@@ -9,6 +9,7 @@ import (
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
 )
 
+// TODO: я чет намудрил со структурами, userPresence - копия userStats, надо что то придумать, для изоляции и для ликивдации дублирования всех полей кроме lastActivity и email (в userStats)
 type userPresence struct {
 	lastActivity  time.Time
 	totalUplink   int64
@@ -19,10 +20,17 @@ type userPresence struct {
 // PresenceCache — in-memory кэш онлайн-статусов и трафика.
 // Коллектор пишет сюда на каждом тике через SetStats.
 // API читает отсюда — без обращений к Xray напрямую.
+// Хранит мапы по email и ownerID, чтобы не сортировать и не выделять 
+// большой слайс каждый раз при запросе пользователей только одного web_user'а (админа).
 type PresenceCache struct {
 	mu      sync.RWMutex
 	state   map[string]userPresence
 	timeout time.Duration // порог неактивности для offline
+	// Основной поиск по Email (для коллектора)
+	byEmail map[string]*models.UserStats
+	// Индекс по OwnerID (для API и WS-клиентов)
+	// ownerID -> email -> *UserStats
+	byOwner map[int64]map[string]*models.UserStats
 }
 
 // NewPresenceCache создаёт пустой кэш с дефолтным таймаутом неактивности.
@@ -31,6 +39,8 @@ func NewPresenceCache() *PresenceCache {
 	return &PresenceCache{
 		state:   make(map[string]userPresence),
 		timeout: 10 * time.Second, // если 10 секунд нет трафика — считаем offline
+		byEmail: make(map[string]*models.UserStats),
+		byOwner: make(map[int64]map[string]*models.UserStats),
 	}
 }
 
@@ -42,7 +52,7 @@ func NewPresenceCache() *PresenceCache {
 // Возвращает:
 // isOnline — активен ли юзер прямо сейчас
 // shouldNotify — нужно ли отправлять ивент в WS
-func (p *PresenceCache) SetStats(email string, uplink, downlink int64) (isOnline bool, shouldNotify bool) {
+func (p *PresenceCache) SetStats(ownerID int64, email string, uplink, downlink int64) (isOnline bool, shouldNotify bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -73,6 +83,26 @@ func (p *PresenceCache) SetStats(email string, uplink, downlink int64) (isOnline
 		totalDownlink: downlink,
 		wasOnline:     isOnline,
 	}
+
+	// 5. Синхронизируем указатели в byEmail и byOwner
+	stat, ok := p.byEmail[email]
+	if !ok {
+		stat = &models.UserStats{
+			Email: email,
+		}
+		p.byEmail[email] = stat
+	}
+
+	// 6. Добавляем во вторичный индекс по OwnerID
+	if _, ok := p.byOwner[ownerID]; !ok {
+		p.byOwner[ownerID] = make(map[string]*models.UserStats)
+	}
+	p.byOwner[ownerID][email] = stat
+
+	// 7. Обновляем значения объекта по ссылке
+	stat.Uplink = uplink
+	stat.Downlink = downlink
+	stat.Online = isOnline
 
 	return isOnline, shouldNotify
 }
@@ -109,16 +139,44 @@ func (p *PresenceCache) GetAllStats() []models.UserStats {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	result := make([]models.UserStats, 0, len(p.state))
-	now := time.Now()
-
-	for email, presence := range p.state {
-		result = append(result, models.UserStats{
-			Email:    email,
-			Uplink:   presence.totalUplink,
-			Downlink: presence.totalDownlink,
-			Online:   now.Sub(presence.lastActivity) < p.timeout,
-		})
+	result := make([]models.UserStats, 0, len(p.byEmail))
+	for _, stat := range p.byEmail {
+		result = append(result, *stat)
 	}
 	return result
+}
+
+// GetStatsByOwner возвращает метрики за O(K) ТОЛЬКО для указанного ownerID.
+// Не делает полного обхода O(N) и лишней фильтрации.
+func (p *PresenceCache) GetStatsByOwner(ownerID int64) []models.UserStats {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	ownerMap, ok := p.byOwner[ownerID]
+	if !ok || len(ownerMap) == 0 {
+		return []models.UserStats{}
+	}
+
+	result := make([]models.UserStats, 0, len(ownerMap))
+	for _, stat := range ownerMap {
+		result = append(result, *stat)
+	}
+
+	return result
+}
+
+// RemoveUser чистит память при удалении пользователя из системы.
+func (p *PresenceCache) RemoveUser(ownerID int64, email string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	delete(p.state, email)
+	delete(p.byEmail, email)
+
+	if ownerMap, ok := p.byOwner[ownerID]; ok {
+		delete(ownerMap, email)
+		if len(ownerMap) == 0 {
+			delete(p.byOwner, ownerID)
+		}
+	}
 }
