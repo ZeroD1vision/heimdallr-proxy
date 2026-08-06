@@ -26,9 +26,9 @@ var upgrader = websocket.Upgrader{
 }
 
 type WSManager struct {
-	clients    map[int64]map[*Client]bool
-	register   chan *Client
-	unregister chan *Client
+	clients    map[int64]map[*WSClient]bool
+	register   chan *WSClient
+	unregister chan *WSClient
 	notifier   chan models.Event
 }
 
@@ -36,7 +36,7 @@ type WSNotifier struct {
 	manager *WSManager
 }
 
-type Client struct {
+type WSClient struct {
 	manager    *WSManager
 	ownerID    int64
 	conn       *websocket.Conn
@@ -46,10 +46,10 @@ type Client struct {
 
 func NewWSManager() *WSManager {
 	return &WSManager{
-		clients:    make(map[int64]map[*Client]bool),
+		clients:    make(map[int64]map[*WSClient]bool),
 		notifier:   make(chan models.Event, 256),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
+		register:   make(chan *WSClient),
+		unregister: make(chan *WSClient),
 	}
 }
 
@@ -66,9 +66,14 @@ func (m *WSManager) Run() {
 		select {
 		case client := <-m.register:
 			if _, ok := m.clients[client.ownerID]; !ok {
-				m.clients[client.ownerID] = make(map[*Client]bool)
+				m.clients[client.ownerID] = make(map[*WSClient]bool)
 			}
 			m.clients[client.ownerID][client] = true
+
+			slog.Info("ws client connected", 
+    		    "owner_id", client.ownerID, 
+    		    "total_active_clients", len(m.clients[client.ownerID]),
+    		)
 
 		case client := <-m.unregister:
 			if _, ok := m.clients[client.ownerID]; ok {
@@ -79,10 +84,17 @@ func (m *WSManager) Run() {
 					if len(m.clients[client.ownerID]) == 0 {
 						delete(m.clients, client.ownerID)
 					}
+					slog.Info("ws client disconnected", 
+        			    "owner_id", client.ownerID,
+        			)
 				}
 			}
 
 		case event := <-m.notifier:
+			slog.Debug("ws manager received event", 
+			    "event_owner", event.OwnerID, 
+			    "registered_clients", len(m.clients[event.OwnerID]),
+			)
 			userClients, ok := m.clients[event.OwnerID]; 
 			
 			if !ok || len(userClients) == 0 {
@@ -107,7 +119,7 @@ func (m *WSManager) Run() {
 	}
 }
 
-func (c *Client) writeToSocket() {
+func (c *WSClient) writeToSocket() {
 	ticker := time.NewTicker(pingWait)
 	defer func() {
 		ticker.Stop()
@@ -139,7 +151,7 @@ func (c *Client) writeToSocket() {
 	}
 }
 
-func (c *Client) readFromSocket() {
+func (c *WSClient) readFromSocket() {
 	defer func() {
 		c.manager.unregister <- c
 		c.Close()
@@ -164,7 +176,7 @@ func (c *Client) readFromSocket() {
 // Вспомогаетльные функции
 
 // Закрывает соединение с клиентом и очищает ресурсы безопасно для многопоточности с использованием sync.Once.
-func (c *Client) Close() {
+func (c *WSClient) Close() {
 	c.closeOnce.Do(func() {
 		close(c.send)
 		c.conn.Close()
