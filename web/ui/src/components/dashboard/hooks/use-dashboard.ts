@@ -23,7 +23,8 @@ import { useNotify, NotificationPresets } from '@/hooks/use-notify';
 import { tokenStorage } from '@/lib/api';
 import { useVisualStore } from '@/store/use-visual-store';
 import { dashboardApi } from '@/components/dashboard/api/dashboard-api';
-import type { SpaceUser, ServerStats, HistoryEntry, ConfirmAction, UserFilter, UserStat, EnrichedUser } from '@/components/dashboard/types';
+import type { SpaceUser, ServerStats, HistoryEntry, ConfirmAction, UserFilter, UserStat, EnrichedUser, RealtimeEvent } from '@/components/dashboard/types';
+import { useRealtime } from '@/hooks/use-realtime';
 
 // ─── Утилита слияния ──────────────────────────────────────────────────────────
  
@@ -42,12 +43,17 @@ function mergeUsersWithStats(users: SpaceUser[], stats: UserStat[]): EnrichedUse
  
   return users.map((u) => {
     const live = statsMap.get(u.email);
+    const liveStatus = u.is_blocked ? 'blocked' : live?.online ? 'online' : 'offline';
+
     return {
       ...u,
+      status: liveStatus,
       // Живые данные из presence-кэша, если юзер там есть.
-      // Fallback 0 — юзер ещё ни разу не появлялся в кэше (новый или оффлайн с начала сессии).
-      uplink_bytes:   live?.uplink_bytes   ?? 0,
-      downlink_bytes: live?.downlink_bytes ?? 0,
+      // юзер ещё ни разу не появлялся в кэше, смотрим в первоначально 
+      // собранный fetchAll массив юзеров, если и там нет (новый или оффлайн с начала сессии), 
+      // если и там ничег то фолбек = 0.
+      uplink_bytes:  live?.uplink_bytes  ?? u.uplink_bytes  ?? 0,
+      downlink_bytes: live?.downlink_bytes ?? u.downlink_bytes ?? 0,
     };
   });
 }
@@ -144,13 +150,56 @@ export function useDashboard() {
     setLoading(false);
   }, [notify]);
 
-  // Запускаем fetchAll сразу и затем по таймеру.
-  // Таймер чистится при анмаунте чтобы не было утечек.
+  // Первичная гидратация — один раз при монтировании, глушим линтер тоже чтобы не пиздел
+  useEffect(() => { fetchAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── WebSocket ────────────────────────────────────────────────────────────────
+
+  const handleRealtimeEvent = useCallback((event: RealtimeEvent) => {
+    if (event.type === 'METRICS_UPDATE') {
+      const stat = event.payload;
+      // Патчим только одну запись в массиве — не заменяем весь стейт
+      setStats(prev => {
+        const idx = prev.findIndex(s => s.email === stat.email);
+        if (idx === -1) return [...prev, stat];
+        const next = [...prev];
+        next[idx] = stat;
+        return next;
+      });
+    }
+
+    if (event.type === 'USER_UPDATED') {
+      const updatedUser = event.payload;
+      setUsers(prev => {
+        const idx = prev.findIndex(u => u.email === updatedUser.email);
+        if (idx === -1) return [...prev, updatedUser];
+        const next = [...prev];
+        next[idx] = updatedUser;
+        return next;
+      });
+    }
+  
+    if (event.type === 'USER_DELETED') {
+      const { email } = event.payload;
+      // Удаляем из обоих источников
+      setUsers(prev => prev.filter(u => u.email !== email));
+      setStats(prev => prev.filter(s => s.email !== email));
+    }
+  }, []);
+
+  const { isConnected, status: socketStatus } = useRealtime<RealtimeEvent>({
+    onMessage: handleRealtimeEvent,
+    onConnect: fetchAll, // ресинк (повторная гидратация) при переподключении, чтобы не пропустить события
+  });
+
+  // ── REST Polling Fallback ────────────────────────────────────────────────────
+  // Активен только когда WS не работает как фолбек
+
   useEffect(() => {
-    fetchAll();
+    if (isConnected) return;
     const id = setInterval(fetchAll, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [fetchAll]);
+  }, [isConnected, fetchAll]);
 
   // ── Действия над пользователями ───────────────────────────────────────────
 
@@ -198,8 +247,8 @@ export function useDashboard() {
    */
   const enriched = mergeUsersWithStats(users, stats);
  
-  const online = users.filter((u) => u.status === 'online').length;
-  const frozen = users.filter((u) => u.status === 'blocked').length;
+  const online = enriched.filter((u) => u.status === 'online').length;
+  const frozen = enriched.filter((u) => u.status === 'blocked').length;
  
   /**
    * Суммарный трафик по всем юзерам — для карточек Uplink/Downlink в шапке.
@@ -237,6 +286,10 @@ export function useDashboard() {
     search,        setSearch,
     confirmAction, setConfirmAction,
     showCreate,    setShowCreate,
+
+    // Статус подключения
+    isConnected,
+    realtimeStatus: socketStatus, // алиас, чтобы UI не знал про словечко "socket"
 
     // Экшены
     fetchAll,

@@ -236,7 +236,6 @@ export const notificationMachine = setup({
     ),
     startDisplayTimer: ({ context, self }) => {
       const duration = displayDurationMs(context.queue);
-      console.log(`[Timer] Starting display timer for ${duration}ms`);
 
       setTimeout(() => {
         self.send({ type: 'TIMER_DONE' });
@@ -308,8 +307,7 @@ export const notificationMachine = setup({
       },
       on: {
         ANIMATION_END: { 
-            target: 'visible', 
-            actions: [() => console.log('[ANIMATION_END] received in expanding')] 
+            target: 'visible'
         },
 
         NOTIFY: [
