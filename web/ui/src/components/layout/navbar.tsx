@@ -105,7 +105,6 @@ function NavbarContent() {
   const isIslandExpanded =
     showContent ||
     notifState === 'fadingOut';
-  console.log('[Navbar] Rendered, notifState =', notifState);
  
   // ─── Настройка навигации ────────────────────────────────────────────────────
   const navigation = {
