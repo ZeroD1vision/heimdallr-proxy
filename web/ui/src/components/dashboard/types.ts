@@ -109,3 +109,31 @@ export interface CreateForm {
  * 'all' — без фильтра, остальные значения совпадают со SpaceUser.status.
  */
 export type UserFilter = 'all' | 'online' | 'offline' | 'blocked';
+
+
+// ─── Realtime Event System ───────────────────────────────────────────────────
+// 
+export type EventType = 
+  | 'METRICS_UPDATE'
+  | 'USER_UPDATED'
+  | 'USER_DELETED';
+
+
+// Обертка для события, приходящего с бэка через WS.
+export interface EventEnvelope<TType extends EventType, TPayload> {
+  type: TType;
+  payload: TPayload;
+  timestamp: number; // unix timestamp seconds
+}
+
+/**
+ * Дискриминированное объединение событий. (Дискриминированный союз)
+ * При проверке (event.type === 'METRICS_UPDATE') TypeScript сам 
+ * поймет, что event.payload — это UserStat/SpaceUser, без as и кучи typeof в функции проверке.
+ * Написано через дженерик, причем двойной, чтобы не просто не дублировать поля type, timestamp и payload 
+ * в каждом событии, но и чтобы была возможность типизировать payload тоже.
+ */
+export type RealtimeEvent =
+  | EventEnvelope<'METRICS_UPDATE', UserStat>
+  | EventEnvelope<'USER_UPDATED', SpaceUser>
+  | EventEnvelope<'USER_DELETED', { email: string }>;
