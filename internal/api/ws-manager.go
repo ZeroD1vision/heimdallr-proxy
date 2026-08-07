@@ -32,10 +32,6 @@ type WSManager struct {
 	notifier   chan models.Event
 }
 
-type WSNotifier struct {
-	manager *WSManager
-}
-
 type WSClient struct {
 	manager    *WSManager
 	ownerID    int64
@@ -80,6 +76,7 @@ func (m *WSManager) Run() {
 				if _, ok := m.clients[client.ownerID][client]; ok {
 					delete(m.clients[client.ownerID], client)
 					client.Close()
+					close(client.send)
 
 					if len(m.clients[client.ownerID]) == 0 {
 						delete(m.clients, client.ownerID)
@@ -111,8 +108,14 @@ func (m *WSManager) Run() {
 				select {
 				case client.send <- payload:
 				default:
-					delete(userClients, client)
-					client.Close()
+					if _, exists := userClients[client]; exists {
+    				    delete(userClients, client)
+    				    close(client.send)
+    				    client.Close()
+    				    if len(userClients) == 0 {
+    				        delete(m.clients, client.ownerID)
+    				    }
+    				}
 				}
 			}
 		}
@@ -178,7 +181,6 @@ func (c *WSClient) readFromSocket() {
 // Закрывает соединение с клиентом и очищает ресурсы безопасно для многопоточности с использованием sync.Once.
 func (c *WSClient) Close() {
 	c.closeOnce.Do(func() {
-		close(c.send)
 		c.conn.Close()
 	})
 }

@@ -772,7 +772,6 @@ func (s *Server) handleWebSocket(c echo.Context) error {
 	}
 	
 	client.manager.register <- client
-	slog.Info("ws client connected", "client_owner_id", client.ownerID)
 
 	// Запускаем горутины чтения/записи для клиента
 	go client.writeToSocket()
