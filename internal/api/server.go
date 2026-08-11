@@ -33,6 +33,7 @@ type StatsProvider interface {
 // HistoryProvider — исторические данные из БД.
 type HistoryProvider interface {
 	GetHistory(ctx context.Context, email string, limit int) ([]models.UserHistory, error)
+	GetHistoryByOwnerID(ctx context.Context, ownerID int64, limit int) ([]models.UserHistory, error)
 }
 
 // OTPStore — всё что серверу нужно от БД для работы с OTP.
@@ -740,10 +741,15 @@ func (s *Server) handleHistory(c echo.Context) error {
 		limit = parsed
 	}
 
-	history, err := s.historyProvider.GetHistory(c.Request().Context(), s.adminEmail, limit)
+	claims, ok := c.Get("claims").(*jwtClaims)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, errResp("unauthorized"))
+	}
+
+	history, err := s.historyProvider.GetHistoryByOwnerID(c.Request().Context(), int64(claims.WebUserID), limit)
 	if err != nil {
 		slog.Error("api: failed to get history", "error", err, "remote_ip", c.RealIP())
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return c.JSON(http.StatusInternalServerError, errResp("internal error"))
 	}
 	return c.JSON(http.StatusOK, history)
 }
