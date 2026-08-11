@@ -187,9 +187,12 @@ export function useDashboard() {
     }
   }, []);
 
+  const token = tokenStorage.getToken();
+
   const { isConnected, status: socketStatus } = useRealtime<RealtimeEvent>({
     onMessage: handleRealtimeEvent,
     onConnect: fetchAll, // ресинк (повторная гидратация) при переподключении, чтобы не пропустить события
+    enabled: !!token && !loading, // не подключаемся пока нет токена или идёт первичная загрузка
   });
 
   // ── REST Polling Fallback ────────────────────────────────────────────────────

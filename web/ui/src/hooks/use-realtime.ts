@@ -88,6 +88,28 @@ export function useRealtime<T = unknown>({
     };
   }, [connect]);
 
+  // Мгновенный реконнект при возвращении на вкладку или появлении сети
+  useEffect(() => {
+    const handleWakeUp = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        delayRef.current = INITIAL_DELAY_MS;
+        connect();
+      }
+    };
+  
+    document.addEventListener('visibilitychange', handleWakeUp);
+    window.addEventListener('online', handleWakeUp);
+  
+    return () => {
+      document.removeEventListener('visibilitychange', handleWakeUp);
+      window.removeEventListener('online', handleWakeUp);
+    };
+  }, [connect]);
+
   return { status, isConnected: status === 'connected' };
 }
 
