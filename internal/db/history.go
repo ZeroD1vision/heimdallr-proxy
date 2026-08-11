@@ -33,6 +33,22 @@ func (s *Store) GetHistory(ctx context.Context, email string, limit int) ([]mode
 	return histories, nil
 }
 
+// GetHistoryByOwnerID возвращает последние n=limit записи истории юзеров принадлежащих указанному владельцу.
+func (s *Store) GetHistoryByOwnerID(ctx context.Context, ownerID int64, limit int) ([]models.UserHistory, error) {
+	var histories []models.UserHistory
+	err := s.db.WithContext(ctx).
+		Joins("JOIN users ON users.email = user_histories.email").
+		Where("users.owner_id = ?", ownerID).
+		Order("user_histories.created_at DESC").
+		Limit(limit).
+		Find(&histories).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("get history for ownerID %d: %w", ownerID, err)
+	}
+	return histories, nil
+}
+
 // GetHistorySince возвращает историю с указанного момента.
 // Используется для выборок по окну времени, когда нужен не весь ряд, а только свежий интервал.
 func (s *Store) GetHistorySince(ctx context.Context, email string, since time.Time) ([]models.UserHistory, error) {
