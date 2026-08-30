@@ -10,7 +10,7 @@ import (
 	"github.com/ZeroD1vision/heimdallr-proxy/internal/models"
 )
 
-// CollectorStore описывает только те операции хранилища, которые нужны коллектору в ежедневном цикле.
+// CollectorStore описывает только те операции БД, которые нужны коллектору в ежедневном цикле.
 // Объединяем в один интерфейс намеренно: оба метода работают с БД,
 // это одна сущность с точки зрения коллектора.
 // GetAllUsers вызывается каждый тик — список всегда актуален,
@@ -30,7 +30,7 @@ type XrayClient interface {
 // PresenceStore — минимальный контракт для кэша online/offline статусов и текущих счетчиков трафика.
 // Коллектор пишет в этот кэш после каждой попытки опроса Xray.
 type PresenceStore interface {
-	SetStats(ownerID int64, email string, uplink, downlink int64) (isOnline bool, shouldNotify bool)
+	SetStats(ownerID int64, email string, uplink, downlink int64)
 	IsOnline(email string) bool
 }
 
@@ -41,6 +41,7 @@ type Collector struct {
 	presence 	  PresenceStore
 	pipeline 	  *Pipeline
 	interval 	  time.Duration
+	lastStats     map[string]models.UserStats // кэш последних stats
 }
 
 type EventNotifier interface {
@@ -69,6 +70,7 @@ func NewCollector(
 		presence: 	   presence,
 		pipeline: 	   pipe,
 		interval: 	   interval,
+		lastStats:     make(map[string]models.UserStats),
 	}
 }
 
@@ -122,13 +124,24 @@ func (c *Collector) tick(ctx context.Context) {
 			continue
 		}
 
-		// Обновляем статистику и автоматически меняем online/offline на основе прироста трафика
+		// Обновляем статистику и автоматически вычисляем online/offline на основе прироста трафика
 		if c.presence != nil {
-			isOnline, shouldNotify := c.presence.SetStats(user.OwnerID, user.Email, stats.Uplink, stats.Downlink)
-			stats.Online = isOnline
+			prevStats := c.lastStats[user.Email]
+			hasNewTraffic := stats.Uplink > prevStats.Uplink || stats.Downlink > prevStats.Downlink
+			wasOnline := prevStats.Online // Онлайн из старой структуры
 
-			// Отправляем событие в WS-менеджер
-			if c.eventNotifier != nil && shouldNotify {
+			if hasNewTraffic {
+				c.presence.SetStats(user.OwnerID, user.Email, stats.Uplink, stats.Downlink) // Устанавливаем новую структуру
+			}
+
+			isOnline := c.presence.IsOnline(user.Email) // Онлайн из обновленной структуры
+			stats.Online = isOnline  // Обновляем поле Online в stats
+			c.lastStats[user.Email] = stats // Обновляем кэш последних stats
+
+			// Отправляем событие в WS-менеджер если:
+			// - Есть новый трафик
+			// - Или изменился статус (например, перешел из online в offline)
+			if c.eventNotifier != nil && (hasNewTraffic || wasOnline != isOnline) {
 				slog.Debug("collector sending event", 
 				    "user_email", user.Email, 
 				    "owner_id", user.OwnerID,
@@ -139,6 +152,10 @@ func (c *Collector) tick(ctx context.Context) {
 					Timestamp: time.Now().Unix(),
     			    Payload: stats, // готовая структура UserStats
     			})
+			}
+
+			if !hasNewTraffic {
+				continue // Если прироста трафика нет, то не проверяем лимиты и не пишем историю
 			}
 		}
 
