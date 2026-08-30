@@ -14,7 +14,6 @@ type userPresence struct {
 	lastActivity  time.Time
 	totalUplink   int64
 	totalDownlink int64
-	wasOnline     bool
 }
 
 // PresenceCache — in-memory кэш онлайн-статусов и трафика.
@@ -34,15 +33,16 @@ type PresenceCache struct {
 }
 
 // NewPresenceCache создаёт пустой кэш с дефолтным таймаутом неактивности.
-// Значение timeout выбрано как быстрый, но не слишком шумный сигнал о живой активности.
 func NewPresenceCache() *PresenceCache {
 	return &PresenceCache{
 		state:   make(map[string]userPresence),
-		timeout: 10 * time.Second, // если 10 секунд нет трафика — считаем offline
+		timeout: 5 * time.Second, // если 5 секунд нет трафика — считаем offline
 		byEmail: make(map[string]*models.UserStats),
 		byOwner: make(map[int64]map[string]*models.UserStats),
 	}
 }
+
+//TODO: Поменять комментарии документации в соответствие с реальным методом
 
 // SetStats обновляет агрегированное состояние пользователя и переопределяет lastActivity только при новом трафике.
 // Такое поведение позволяет считать пользователя online по факту движения данных, а не по факту наличия записи.
@@ -52,7 +52,7 @@ func NewPresenceCache() *PresenceCache {
 // Возвращает:
 // isOnline — активен ли юзер прямо сейчас
 // shouldNotify — нужно ли отправлять ивент в WS
-func (p *PresenceCache) SetStats(ownerID int64, email string, uplink, downlink int64) (isOnline bool, shouldNotify bool) {
+func (p *PresenceCache) SetStats(ownerID int64, email string, uplink, downlink int64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -68,23 +68,14 @@ func (p *PresenceCache) SetStats(ownerID int64, email string, uplink, downlink i
 		lastActivity = now
 	}
 
-	// 3. Определяем текущий онлайн-статус
-	isOnline = now.Sub(lastActivity) < p.timeout
-
-	// 4. Определяем, нужно ли уведомлять о смене статуса
-	//    - Есть новый трафик
-	//    - Или изменился статус (например, перешел из online в offline)
-	//    - Или это первая запись юзера
-	shouldNotify = hasNewTraffic || (prev.wasOnline != isOnline) || !exists
-
+	// 3. Обновляем кэш состояния пользователя
 	p.state[email] = userPresence{
 		lastActivity:  lastActivity,
 		totalUplink:   uplink,
 		totalDownlink: downlink,
-		wasOnline:     isOnline,
 	}
 
-	// 5. Синхронизируем указатели в byEmail и byOwner
+	// 4. Синхронизируем указатели в byEmail
 	stat, ok := p.byEmail[email]
 	if !ok {
 		stat = &models.UserStats{
@@ -93,18 +84,15 @@ func (p *PresenceCache) SetStats(ownerID int64, email string, uplink, downlink i
 		p.byEmail[email] = stat
 	}
 
-	// 6. Добавляем во вторичный индекс по OwnerID
+	// 5. Добавляем во вторичный индекс по OwnerID
 	if _, ok := p.byOwner[ownerID]; !ok {
 		p.byOwner[ownerID] = make(map[string]*models.UserStats)
 	}
 	p.byOwner[ownerID][email] = stat
 
-	// 7. Обновляем значения объекта по ссылке
+	// 6. Обновляем значения объекта по ссылке
 	stat.Uplink = uplink
 	stat.Downlink = downlink
-	stat.Online = isOnline
-
-	return isOnline, shouldNotify
 }
 
 // IsOnline быстро проверяет, был ли пользователь активен в пределах timeout.
@@ -120,12 +108,8 @@ func (p *PresenceCache) IsOnline(email string) bool {
 	}
 
 	// Если активность была недавно — онлайн
-	if time.Since(presence.lastActivity) < p.timeout {
-		return true
-	}
-
 	// Если давно неактивен — офлайн
-	return false
+	return time.Since(presence.lastActivity) <= p.timeout
 }
 
 // GetAllStats отдаёт фронту снимок всех известных пользователей сразу одним массивом.
